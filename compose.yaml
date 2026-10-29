@@ -1,0 +1,146 @@
+# Локальна інфраструктура. Дані для входу беруться з .env (див. credentials.md).
+# Усі порти слухають лише 127.0.0.1.
+
+name: flowboard
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes"]
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  opensearch:
+    image: opensearchproject/opensearch:2.19.1
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      bootstrap.memory_lock: "true"
+      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: ${OPENSEARCH_ADMIN_PASSWORD}
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 65536, hard: 65536 }
+    ports:
+      - "127.0.0.1:9200:9200"
+      - "127.0.0.1:9600:9600"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sfk -u admin:$${OPENSEARCH_INITIAL_ADMIN_PASSWORD} https://localhost:9200/_cluster/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  rustfs:
+    image: rustfs/rustfs:1.0.4
+    restart: unless-stopped
+    environment:
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+    ports:
+      - "127.0.0.1:9000:9000" # S3 API
+      - "127.0.0.1:9001:9001" # веб-консоль
+    volumes:
+      - rustfs-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/health && curl -fsS http://127.0.0.1:9001/rustfs/console/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+  # Одноразово створює бакет через S3 API.
+  rustfs-init:
+    image: amazon/aws-cli:2.39.2
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
+      AWS_DEFAULT_REGION: us-east-1
+      BUCKET: ${RUSTFS_BUCKET}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - aws --endpoint-url http://rustfs:9000 s3api head-bucket --bucket "$${BUCKET}" 2>/dev/null || aws --endpoint-url http://rustfs:9000 s3 mb "s3://$${BUCKET}"
+    restart: "no"
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.3.7
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --memory=1G
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr=internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr=internal://redpanda:8082,external://localhost:18082
+      - --schema-registry-addr=internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr=redpanda:33145
+      - --advertise-rpc-addr=redpanda:33145
+    # Kafka API вимагає SASL; суперкористувач створюється з RP_BOOTSTRAP_USER при першому старті кластера.
+    configs:
+      - source: redpanda-bootstrap
+        target: /etc/redpanda/.bootstrap.yaml
+    environment:
+      RP_BOOTSTRAP_USER: ${REDPANDA_USER}:${REDPANDA_PASSWORD}:SCRAM-SHA-256
+    ports:
+      - "127.0.0.1:19092:19092" # Kafka API
+      - "127.0.0.1:18081:18081" # Schema Registry
+      - "127.0.0.1:18082:18082" # HTTP Proxy
+      - "127.0.0.1:19644:9644" # Admin API
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+configs:
+  redpanda-bootstrap:
+    content: |
+      enable_sasl: true
+      superusers: ["${REDPANDA_USER}"]
+
+volumes:
+  postgres-data:
+  redis-data:
+  opensearch-data:
+  rustfs-data:
+  redpanda-data:
