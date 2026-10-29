@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { Avatar } from "../components/Avatar";
 import { Logo } from "../components/Logo";
+import { ProfileModal } from "../components/ProfileModal";
 import { CreateProjectModal } from "../components/ProjectModals";
 import { ThemeToggle } from "../theme";
 import type { Project } from "../types";
@@ -42,6 +43,7 @@ export default function AppLayout() {
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const reloadProjects = useCallback(async () => {
     try {
@@ -65,7 +67,7 @@ export default function AppLayout() {
         <div className="spacer" />
         <ThemeToggle />
         <div className="topbar-user">
-          <Avatar user={user} size={30} />
+          <Avatar user={user} size={30} onClick={() => setProfileOpen(true)} />
           <span className="topbar-name">{user!.name}</span>
           <button className="btn btn-ghost btn-sm" onClick={logout}>
             Вийти
@@ -107,6 +109,8 @@ export default function AppLayout() {
           {projects === null ? <div className="center">Завантаження…</div> : <Outlet context={ctx} />}
         </main>
       </div>
+
+      {profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}
 
       {creating && (
         <CreateProjectModal

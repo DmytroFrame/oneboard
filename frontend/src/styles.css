@@ -362,6 +362,59 @@ h3 {
   line-height: 1;
   user-select: none;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  overflow: hidden;
+}
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ---------- profile ---------- */
+.profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  padding-top: 8px;
+}
+.profile-avatar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  margin-bottom: 10px;
+}
+.profile-avatar .avatar {
+  border-width: 3px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.profile-avatar--busy .avatar {
+  opacity: 0.5;
+}
+.profile-avatar .spinner {
+  position: absolute;
+}
+.profile-name {
+  font-size: 18px;
+  font-weight: 650;
+}
+.profile-email {
+  color: var(--text-subtle);
+  font-size: 14px;
+}
+.profile-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.profile-hint {
+  color: var(--text-subtle);
+  font-size: 12px;
+  margin: 10px 0 0;
 }
 .avatar--clickable {
   cursor: pointer;

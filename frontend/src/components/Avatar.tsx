@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { User } from "../types";
 
 export function initials(name: string) {
@@ -17,6 +18,7 @@ interface Props {
 }
 
 export function Avatar({ user, size = 28, active, onClick }: Props) {
+  const [broken, setBroken] = useState<string | null>(null);
   const style = {
     width: size,
     height: size,
@@ -25,17 +27,25 @@ export function Avatar({ user, size = 28, active, onClick }: Props) {
   };
   const className = `avatar${active ? " avatar--active" : ""}${onClick ? " avatar--clickable" : ""}`;
   const title = user ? `${user.name} (${user.email})` : "Не призначено";
+  const content =
+    user?.avatarUrl && broken !== user.avatarUrl ? (
+      <img src={user.avatarUrl} alt="" loading="lazy" draggable={false} onError={() => setBroken(user.avatarUrl)} />
+    ) : user ? (
+      initials(user.name)
+    ) : (
+      "?"
+    );
 
   if (onClick) {
     return (
       <button type="button" className={className} style={style} title={title} onClick={onClick}>
-        {user ? initials(user.name) : "?"}
+        {content}
       </button>
     );
   }
   return (
     <span className={className} style={style} title={title}>
-      {user ? initials(user.name) : "?"}
+      {content}
     </span>
   );
 }

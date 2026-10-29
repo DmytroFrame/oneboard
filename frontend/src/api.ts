@@ -13,8 +13,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const res = await fetch(`/api${path}`, {
     method,
     credentials: "same-origin",
-    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    headers: body !== undefined && !(body instanceof FormData) ? { "Content-Type": "application/json" } : undefined,
+    body: body instanceof FormData ? body : body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
     let message = `Помилка ${res.status}`;
@@ -38,6 +38,12 @@ export const api = {
   logout: () => request<void>("POST", "/auth/logout"),
 
   users: () => request<User[]>("GET", "/users"),
+  uploadAvatar: (image: Blob) => {
+    const form = new FormData();
+    form.append("avatar", image, "avatar");
+    return request<User>("PUT", "/users/me/avatar", form);
+  },
+  removeAvatar: () => request<User>("DELETE", "/users/me/avatar"),
 
   projects: () => request<Project[]>("GET", "/projects"),
   createProject: (name: string, key: string) => request<Project>("POST", "/projects", { name, key }),

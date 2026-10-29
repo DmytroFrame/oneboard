@@ -5,6 +5,7 @@ export interface User {
   name: string;
   email: string;
   color: string;
+  avatarUrl: string | null;
 }
 
 export type Role = "owner" | "member";

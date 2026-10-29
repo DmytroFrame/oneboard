@@ -127,7 +127,7 @@ function Board({ project }: { project: Project }) {
   useEffect(() => {
     rememberProject(project.id);
     reloadMembers();
-  }, [project.id, reloadMembers]);
+  }, [project.id, reloadMembers, user?.avatarUrl]);
 
   useEffect(() => {
     reset();
