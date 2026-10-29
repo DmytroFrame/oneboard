@@ -1,4 +1,4 @@
-import type { Card, CardInput, Member, Project, Status, User } from "./types";
+import type { Card, CardFilters, CardInput, CardPage, Column, Member, Project, User } from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -49,10 +49,24 @@ export const api = {
   removeMember: (projectId: number, userId: number) =>
     request<void>("DELETE", `/projects/${projectId}/members/${userId}`),
 
-  cards: (projectId: number) => request<Card[]>("GET", `/projects/${projectId}/cards`),
+  columns: (projectId: number) => request<Column[]>("GET", `/projects/${projectId}/columns`),
+  createColumn: (projectId: number, name: string) => request<Column[]>("POST", `/projects/${projectId}/columns`, { name }),
+  renameColumn: (id: number, name: string) => request<Column[]>("PUT", `/columns/${id}`, { name }),
+  moveColumn: (id: number, index: number) => request<Column[]>("POST", `/columns/${id}/move`, { index }),
+  deleteColumn: (id: number, moveTo: number | null) =>
+    request<Column[]>("DELETE", `/columns/${id}${moveTo ? `?moveTo=${moveTo}` : ""}`),
+
+  cards: (projectId: number, columnId: number, filters: CardFilters, cursor: string | null, limit = 20) => {
+    const params = new URLSearchParams({ column: String(columnId), limit: String(limit) });
+    if (cursor) params.set("cursor", cursor);
+    if (filters.q.trim()) params.set("q", filters.q.trim());
+    if (filters.assignees.length) params.set("assignees", filters.assignees.join(","));
+    if (filters.unassigned) params.set("unassigned", "1");
+    return request<CardPage>("GET", `/projects/${projectId}/cards?${params}`);
+  },
   createCard: (projectId: number, input: CardInput) => request<Card>("POST", `/projects/${projectId}/cards`, input),
   updateCard: (id: number, input: CardInput) => request<Card>("PUT", `/cards/${id}`, input),
-  moveCard: (id: number, status: Status, beforeId: number | null) =>
-    request<Card>("POST", `/cards/${id}/move`, { status, beforeId }),
+  moveCard: (id: number, columnId: number, place: { beforeId?: number; afterId?: number } = {}) =>
+    request<Card>("POST", `/cards/${id}/move`, { columnId, ...place }),
   deleteCard: (id: number) => request<void>("DELETE", `/cards/${id}`),
 };

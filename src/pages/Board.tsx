@@ -3,35 +3,17 @@ import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Avatar } from "../components/Avatar";
+import { AddColumn, BoardColumn, type ColumnState } from "../components/BoardColumn";
 import { CardModal } from "../components/CardModal";
 import { ProjectSettingsModal } from "../components/ProjectModals";
-import { COLUMNS, type Card, type CardInput, type Member, type Project, type Status } from "../types";
+import type { Card, CardFilters, CardInput, Column, Member, Project } from "../types";
 import { rememberProject, useLayout } from "./AppLayout";
 
 const VISIBLE_AVATARS = 6;
+const PAGE_SIZE = 20;
 
-const PRIORITY_ICON: Record<Card["priority"], { icon: string; color: string; label: string }> = {
-  low: { icon: "↓", color: "#2684FF", label: "Низький" },
-  medium: { icon: "=", color: "#FFAB00", label: "Середній" },
-  high: { icon: "↑", color: "#FF7452", label: "Високий" },
-  critical: { icon: "⇈", color: "#DE350B", label: "Критичний" },
-};
-
-type ModalState = { card: Card | null; status: Status } | null;
-type DropTarget = { status: Status; beforeId: number | null } | null;
-
-/** Returns a new card list with `id` moved into `status` before `beforeId` (or to the end). */
-function applyMove(cards: Card[], id: number, status: Status, beforeId: number | null): Card[] {
-  const moving = cards.find((c) => c.id === id);
-  if (!moving) return cards;
-  const column = cards
-    .filter((c) => c.status === status && c.id !== id)
-    .sort((a, b) => a.position - b.position);
-  const idx = beforeId === null ? -1 : column.findIndex((c) => c.id === beforeId);
-  column.splice(idx === -1 ? column.length : idx, 0, { ...moving, status });
-  const updated = new Map(column.map((c, position) => [c.id, { ...c, position }]));
-  return cards.map((c) => updated.get(c.id) ?? c);
-}
+type ModalState = { card: Card | null; columnId: number } | null;
+type DropTarget = { columnId: number; beforeId: number | null } | null;
 
 /** Route wrapper: remounts the board when switching projects so all state resets. */
 export default function BoardRoute() {
@@ -42,14 +24,25 @@ export default function BoardRoute() {
   return <Board key={project.id} project={project} />;
 }
 
+function useDebounced<T>(value: T, ms: number) {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return v;
+}
+
 function Board({ project }: { project: Project }) {
   const { user } = useAuth();
   const { reloadProjects } = useLayout();
   const navigate = useNavigate();
   const me = user!;
-  const [cards, setCards] = useState<Card[]>([]);
+  const isOwner = project.role === "owner";
+
+  const [cols, setCols] = useState<ColumnState[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [booting, setBooting] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [selectedUsers, setSelectedUsers] = useState<Set<number>>(new Set());
@@ -61,23 +54,84 @@ function Board({ project }: { project: Project }) {
   const [dropTarget, setDropTarget] = useState<DropTarget>(null);
   const teamRef = useRef<HTMLDivElement>(null);
 
-  const load = useCallback(async () => {
+  // Latest columns state for async callbacks; generation discards responses from stale filter sets.
+  const colsRef = useRef(cols);
+  colsRef.current = cols;
+  const generation = useRef(0);
+
+  const debouncedSearch = useDebounced(search, 300);
+  const filters: CardFilters = useMemo(
+    () => ({ q: debouncedSearch, assignees: [...selectedUsers], unassigned: showUnassigned }),
+    [debouncedSearch, selectedUsers, showUnassigned],
+  );
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+
+  const patchCol = useCallback((columnId: number, patch: (s: ColumnState) => Partial<ColumnState>) => {
+    setCols((prev) => prev.map((s) => (s.column.id === columnId ? { ...s, ...patch(s) } : s)));
+  }, []);
+
+  const fetchPage = useCallback(
+    async (columnId: number, cursor: string | null) => {
+      const gen = generation.current;
+      patchCol(columnId, () => ({ loading: true, error: "" }));
+      try {
+        const page = await api.cards(project.id, columnId, filtersRef.current, cursor, PAGE_SIZE);
+        if (gen !== generation.current) return;
+        patchCol(columnId, (s) => {
+          // Dedupe: a card moved here optimistically may also arrive in a later page.
+          const seen = new Set(s.cards.map((c) => c.id));
+          return {
+            cards: cursor ? [...s.cards, ...page.cards.filter((c) => !seen.has(c.id))] : page.cards,
+            total: page.total,
+            cursor: page.nextCursor,
+            loading: false,
+          };
+        });
+      } catch (err) {
+        if (gen !== generation.current) return;
+        patchCol(columnId, () => ({ loading: false, error: (err as Error).message }));
+      }
+    },
+    [project.id, patchCol],
+  );
+
+  /** Reload columns and the first page of each column. */
+  const reset = useCallback(async () => {
+    const gen = ++generation.current;
     try {
-      const [c, m] = await Promise.all([api.cards(project.id), api.members(project.id)]);
-      setCards(c);
-      setMembers(m);
-      setError("");
+      const columns = await api.columns(project.id);
+      if (gen !== generation.current) return;
+      setCols(columns.map((column) => ({ column, cards: [], total: 0, cursor: null, loading: true, error: "" })));
+      setBooting(false);
+      await Promise.all(columns.map((c) => fetchPage(c.id, null)));
     } catch (err) {
       setError((err as Error).message);
-    } finally {
-      setLoading(false);
+      setBooting(false);
     }
+  }, [project.id, fetchPage]);
+
+  const loadMore = useCallback(
+    (columnId: number) => {
+      const s = colsRef.current.find((c) => c.column.id === columnId);
+      if (!s || s.loading) return;
+      if (s.error || s.cursor) fetchPage(columnId, s.cursor);
+    },
+    [fetchPage],
+  );
+
+  const reloadMembers = useCallback(() => {
+    api.members(project.id).then(setMembers).catch(() => {});
   }, [project.id]);
 
   useEffect(() => {
     rememberProject(project.id);
-    load();
-  }, [load, project.id]);
+    reloadMembers();
+  }, [project.id, reloadMembers]);
+
+  useEffect(() => {
+    reset();
+  }, [reset, filters]);
 
   useEffect(() => {
     if (!teamOpen) return;
@@ -89,6 +143,7 @@ function Board({ project }: { project: Project }) {
   }, [teamOpen]);
 
   const membersById = useMemo(() => new Map(members.map((u) => [u.id, u])), [members]);
+  const columns = useMemo(() => cols.map((s) => s.column), [cols]);
 
   // Current user first, then everyone else alphabetically — like Jira's avatar group.
   const orderedMembers = useMemo(
@@ -96,34 +151,8 @@ function Board({ project }: { project: Project }) {
     [members, me.id],
   );
 
-  const assignedCount = useMemo(() => {
-    const m = new Map<number, number>();
-    for (const c of cards) if (c.assigneeId) m.set(c.assigneeId, (m.get(c.assigneeId) ?? 0) + 1);
-    return m;
-  }, [cards]);
-
   const hasFilters = selectedUsers.size > 0 || showUnassigned || search.trim() !== "";
-
-  const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return cards.filter((c) => {
-      if (selectedUsers.size > 0 || showUnassigned) {
-        const match = c.assigneeId === null ? showUnassigned : selectedUsers.has(c.assigneeId);
-        if (!match) return false;
-      }
-      if (q && !c.title.toLowerCase().includes(q) && !c.key.toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }, [cards, selectedUsers, showUnassigned, search]);
-
-  const columns = useMemo(
-    () =>
-      COLUMNS.map((col) => ({
-        ...col,
-        cards: visible.filter((c) => c.status === col.id).sort((a, b) => a.position - b.position),
-      })),
-    [visible],
-  );
+  const totalVisible = cols.reduce((n, s) => n + s.total, 0);
 
   function toggleUser(id: number) {
     setSelectedUsers((prev) => {
@@ -141,12 +170,35 @@ function Board({ project }: { project: Project }) {
   }
 
   function onMembersChanged(next: Member[]) {
-    const ids = new Set(next.map((m) => m.id));
-    // Removed members' cards are unassigned on the server; mirror that locally.
-    setCards((prev) => prev.map((c) => (c.assigneeId && !ids.has(c.assigneeId) ? { ...c, assigneeId: null } : c)));
-    setSelectedUsers((prev) => new Set([...prev].filter((id) => ids.has(id))));
+    setSelectedUsers((prev) => new Set([...prev].filter((id) => next.some((m) => m.id === id))));
     setMembers(next);
     reloadProjects();
+    reset(); // removed members' cards were unassigned on the server
+  }
+
+  // ---------- columns ----------
+
+  /** Apply a column list from the server while keeping already loaded cards. */
+  function applyColumns(next: Column[]) {
+    setCols((prev) => {
+      const byId = new Map(prev.map((s) => [s.column.id, s]));
+      return next.map((column) => {
+        const existing = byId.get(column.id);
+        return existing
+          ? { ...existing, column }
+          : { column, cards: [], total: 0, cursor: null, loading: false, error: "" };
+      });
+    });
+  }
+
+  async function columnAction(action: () => Promise<Column[]>, fullReload = false) {
+    try {
+      const next = await action();
+      if (fullReload) await reset();
+      else applyColumns(next);
+    } catch (err) {
+      setError((err as Error).message);
+    }
   }
 
   // ---------- drag & drop ----------
@@ -163,7 +215,7 @@ function Board({ project }: { project: Project }) {
     setDropTarget(null);
   }
 
-  function onColumnDragOver(e: DragEvent<HTMLElement>, status: Status) {
+  function onColumnDragOver(e: DragEvent<HTMLElement>, columnId: number) {
     if (draggingId === null) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
@@ -178,53 +230,87 @@ function Board({ project }: { project: Project }) {
         break;
       }
     }
-    if (dropTarget?.status !== status || dropTarget.beforeId !== beforeId) {
-      setDropTarget({ status, beforeId });
+    if (dropTarget?.columnId !== columnId || dropTarget.beforeId !== beforeId) {
+      setDropTarget({ columnId, beforeId });
     }
   }
 
-  async function onColumnDrop(e: DragEvent, status: Status) {
+  async function onColumnDrop(e: DragEvent, columnId: number) {
     e.preventDefault();
     const id = draggingId;
-    const beforeId = dropTarget?.status === status ? dropTarget.beforeId : null;
+    const beforeId = dropTarget?.columnId === columnId ? dropTarget.beforeId : null;
     onDragEnd();
     if (id === null) return;
 
-    setCards((prev) => applyMove(prev, id, status, beforeId));
+    const source = cols.find((s) => s.cards.some((c) => c.id === id));
+    const target = cols.find((s) => s.column.id === columnId);
+    const card = source?.cards.find((c) => c.id === id);
+    if (!source || !target || !card) return;
+
+    // Dropping below the last *loaded* card of a partially loaded column means "after it", not "end of column".
+    let place: { beforeId?: number; afterId?: number } = {};
+    if (beforeId !== null) place = { beforeId };
+    else if (target.cursor !== null) {
+      const last = target.cards.filter((c) => c.id !== id).at(-1);
+      if (last) place = { afterId: last.id };
+    }
+
+    const moved = { ...card, columnId };
+    setCols((prev) =>
+      prev.map((s) => {
+        let cards = s.cards;
+        let total = s.total;
+        if (s.column.id === source.column.id) {
+          cards = cards.filter((c) => c.id !== id);
+          total -= 1;
+        }
+        if (s.column.id === columnId) {
+          const found = beforeId === null ? -1 : cards.findIndex((c) => c.id === beforeId);
+          const idx = found === -1 ? cards.length : found;
+          cards = [...cards.slice(0, idx), moved, ...cards.slice(idx)];
+          total += 1;
+        }
+        return { ...s, cards, total };
+      }),
+    );
+
     try {
-      const saved = await api.moveCard(id, status, beforeId);
-      setCards((prev) => prev.map((c) => (c.id === saved.id ? { ...c, updatedAt: saved.updatedAt } : c)));
+      const saved = await api.moveCard(id, columnId, place);
+      patchCol(columnId, (s) => ({ cards: s.cards.map((c) => (c.id === id ? saved : c)) }));
     } catch (err) {
       setError((err as Error).message);
-      load();
+      reset();
     }
   }
 
   // ---------- CRUD ----------
 
-  async function saveCard(input: CardInput, status: Status) {
+  async function saveCard(input: CardInput, columnId: number) {
     if (!modal) return;
     if (modal.card === null) {
-      const created = await api.createCard(project.id, { ...input, status });
-      setCards((prev) => [...prev, created]);
-      reloadProjects();
-      return;
-    }
-    const id = modal.card.id;
-    const saved = await api.updateCard(id, input);
-    if (status !== modal.card.status) {
-      await api.moveCard(id, status, null);
-      // Positions in the target column were renumbered, so refresh the board.
-      await load();
+      const created = await api.createCard(project.id, { ...input, columnId });
+      // New cards go to the bottom: show it only if the column is fully loaded.
+      patchCol(columnId, (s) => ({ cards: s.cursor === null ? [...s.cards, created] : s.cards, total: s.total + 1 }));
     } else {
-      setCards((prev) => prev.map((c) => (c.id === id ? saved : c)));
+      const old = modal.card;
+      let saved = await api.updateCard(old.id, input);
+      if (columnId !== old.columnId) {
+        saved = await api.moveCard(old.id, columnId);
+        patchCol(old.columnId, (s) => ({ cards: s.cards.filter((c) => c.id !== old.id), total: s.total - 1 }));
+        patchCol(columnId, (s) => ({ cards: s.cursor === null ? [...s.cards, saved] : s.cards, total: s.total + 1 }));
+      } else {
+        patchCol(columnId, (s) => ({ cards: s.cards.map((c) => (c.id === old.id ? saved : c)) }));
+      }
     }
+    reloadProjects();
+    reloadMembers();
   }
 
   async function deleteCard(card: Card) {
     await api.deleteCard(card.id);
-    setCards((prev) => prev.filter((c) => c.id !== card.id));
+    patchCol(card.columnId, (s) => ({ cards: s.cards.filter((c) => c.id !== card.id), total: s.total - 1 }));
     reloadProjects();
+    reloadMembers();
   }
 
   // ---------- render ----------
@@ -243,7 +329,11 @@ function Board({ project }: { project: Project }) {
           <button className="btn btn-ghost" onClick={() => setSettingsOpen(true)}>
             ⚙ Учасники та налаштування
           </button>
-          <button className="btn btn-primary" onClick={() => setModal({ card: null, status: "todo" })}>
+          <button
+            className="btn btn-primary"
+            disabled={columns.length === 0}
+            onClick={() => setModal({ card: null, columnId: columns[0]!.id })}
+          >
             + Створити
           </button>
         </div>
@@ -254,19 +344,19 @@ function Board({ project }: { project: Project }) {
 
         <div className="avatar-group">
           {orderedMembers.slice(0, VISIBLE_AVATARS).map((u) => (
-            <Avatar key={u.id} user={u} size={34} active={selectedUsers.has(u.id)} onClick={() => toggleUser(u.id)} />
+            <Avatar key={u.id} user={u} size={32} active={selectedUsers.has(u.id)} onClick={() => toggleUser(u.id)} />
           ))}
           <div className="team-dropdown" ref={teamRef}>
             <button
               className={`avatar avatar--clickable avatar--more${teamOpen ? " avatar--active" : ""}`}
-              style={{ width: 34, height: 34 }}
+              style={{ width: 32, height: 32 }}
               onClick={() => setTeamOpen((v) => !v)}
               title="Усі учасники проєкту"
             >
               {overflow > 0 ? `+${overflow}` : "☰"}
             </button>
             {teamOpen && (
-              <div className="team-menu">
+              <div className="menu team-menu">
                 <div className="team-menu-title">Учасники · {members.length}</div>
                 {orderedMembers.map((u) => (
                   <label key={u.id} className="team-row">
@@ -280,16 +370,17 @@ function Board({ project }: { project: Project }) {
                       </span>
                       <small>{u.email}</small>
                     </span>
-                    <span className="badge">{assignedCount.get(u.id) ?? 0}</span>
+                    <span className="badge" title="Призначено задач">
+                      {u.assignedCount}
+                    </span>
                   </label>
                 ))}
                 <label className="team-row">
                   <input type="checkbox" checked={showUnassigned} onChange={() => setShowUnassigned((v) => !v)} />
                   <Avatar user={null} size={28} />
                   <span className="team-row-name">Не призначено</span>
-                  <span className="badge">{cards.filter((c) => c.assigneeId === null).length}</span>
                 </label>
-                {project.role === "owner" && (
+                {isOwner && (
                   <button
                     className="team-menu-add"
                     onClick={() => {
@@ -312,9 +403,12 @@ function Board({ project }: { project: Project }) {
           Тільки мої задачі
         </button>
         {hasFilters && (
-          <button className="btn btn-link btn-sm" onClick={clearFilters}>
-            Очистити фільтри
-          </button>
+          <>
+            <span className="muted">Знайдено: {totalVisible}</span>
+            <button className="btn btn-link btn-sm" onClick={clearFilters}>
+              Очистити фільтри
+            </button>
+          </>
         )}
       </div>
 
@@ -324,56 +418,35 @@ function Board({ project }: { project: Project }) {
         </div>
       )}
 
-      {loading ? (
-        <div className="center">Завантаження дошки…</div>
+      {booting ? (
+        <div className="center">
+          <span className="spinner" /> Завантаження дошки…
+        </div>
       ) : (
         <div className="columns">
-          {columns.map((col) => (
-            <section
-              key={col.id}
-              className={`column${dropTarget?.status === col.id ? " column--over" : ""}`}
-              onDragOver={(e) => onColumnDragOver(e, col.id)}
-              onDrop={(e) => onColumnDrop(e, col.id)}
-            >
-              <div className="column-head">
-                <span>{col.title}</span>
-                <span className="column-count">{col.cards.length}</span>
-              </div>
-              <div className="column-body">
-                {col.cards.map((card) => (
-                  <div key={card.id}>
-                    {dropTarget?.status === col.id && dropTarget.beforeId === card.id && <div className="drop-indicator" />}
-                    <article
-                      data-card-id={card.id}
-                      className={`card${draggingId === card.id ? " card--dragging" : ""}${card.status === "done" ? " card--done" : ""}`}
-                      draggable
-                      onDragStart={(e) => onDragStart(e, card)}
-                      onDragEnd={onDragEnd}
-                      onClick={() => setModal({ card, status: card.status })}
-                    >
-                      <div className="card-title">{card.title}</div>
-                      <div className="card-footer">
-                        <span
-                          className="priority"
-                          style={{ color: PRIORITY_ICON[card.priority].color }}
-                          title={`Пріоритет: ${PRIORITY_ICON[card.priority].label}`}
-                        >
-                          {PRIORITY_ICON[card.priority].icon}
-                        </span>
-                        <span className="card-key">{card.key}</span>
-                        <div className="spacer" />
-                        <Avatar user={card.assigneeId ? membersById.get(card.assigneeId) : null} size={24} />
-                      </div>
-                    </article>
-                  </div>
-                ))}
-                {dropTarget?.status === col.id && dropTarget.beforeId === null && <div className="drop-indicator" />}
-                <button className="add-card" onClick={() => setModal({ card: null, status: col.id })}>
-                  + Створити задачу
-                </button>
-              </div>
-            </section>
+          {cols.map((s, i) => (
+            <BoardColumn
+              key={s.column.id}
+              state={s}
+              index={i}
+              allColumns={columns}
+              isOwner={isOwner}
+              draggingId={draggingId}
+              dropBeforeId={dropTarget?.columnId === s.column.id ? dropTarget.beforeId : undefined}
+              membersById={membersById}
+              onDragOver={(e) => onColumnDragOver(e, s.column.id)}
+              onDrop={(e) => onColumnDrop(e, s.column.id)}
+              onCardDragStart={onDragStart}
+              onCardDragEnd={onDragEnd}
+              onCardClick={(card) => setModal({ card, columnId: card.columnId })}
+              onAddCard={() => setModal({ card: null, columnId: s.column.id })}
+              onLoadMore={() => loadMore(s.column.id)}
+              onRename={(name) => columnAction(() => api.renameColumn(s.column.id, name))}
+              onMove={(index) => columnAction(() => api.moveColumn(s.column.id, index))}
+              onDelete={(moveTo) => columnAction(() => api.deleteColumn(s.column.id, moveTo), true)}
+            />
           ))}
+          {isOwner && <AddColumn onAdd={(name) => columnAction(() => api.createColumn(project.id, name))} />}
         </div>
       )}
 
@@ -381,10 +454,11 @@ function Board({ project }: { project: Project }) {
         <CardModal
           key={modal.card?.id ?? "new"}
           card={modal.card}
-          initialStatus={modal.status}
+          initialColumnId={modal.columnId}
+          columns={columns}
           users={orderedMembers}
           currentUser={me}
-          canDelete={!!modal.card && (modal.card.authorId === me.id || project.role === "owner")}
+          canDelete={!!modal.card && (modal.card.authorId === me.id || isOwner)}
           onClose={() => setModal(null)}
           onSave={saveCard}
           onDelete={deleteCard}

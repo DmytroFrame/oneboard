@@ -1,4 +1,3 @@
-export type Status = "todo" | "in_progress" | "review" | "done";
 export type Priority = "low" | "medium" | "high" | "critical";
 
 export interface User {
@@ -12,6 +11,15 @@ export type Role = "owner" | "member";
 
 export interface Member extends User {
   role: Role;
+  assignedCount: number;
+}
+
+export interface Column {
+  id: number;
+  projectId: number;
+  name: string;
+  position: number;
+  cardCount: number;
 }
 
 export interface Project {
@@ -28,10 +36,10 @@ export interface Project {
 export interface Card {
   id: number;
   projectId: number;
+  columnId: number;
   key: string;
   title: string;
   description: string;
-  status: Status;
   priority: Priority;
   position: number;
   authorId: number;
@@ -45,15 +53,20 @@ export interface CardInput {
   description: string;
   priority: Priority;
   assigneeId: number | null;
-  status?: Status;
+  columnId?: number;
 }
 
-export const COLUMNS: { id: Status; title: string }[] = [
-  { id: "todo", title: "До виконання" },
-  { id: "in_progress", title: "В роботі" },
-  { id: "review", title: "На перевірці" },
-  { id: "done", title: "Готово" },
-];
+export interface CardPage {
+  cards: Card[];
+  nextCursor: string | null;
+  total: number;
+}
+
+export interface CardFilters {
+  q: string;
+  assignees: number[];
+  unassigned: boolean;
+}
 
 export const PRIORITIES: { id: Priority; title: string }[] = [
   { id: "low", title: "Низький" },

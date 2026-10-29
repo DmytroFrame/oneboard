@@ -1,24 +1,25 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { COLUMNS, PRIORITIES, type Card, type CardInput, type Priority, type Status, type User } from "../types";
+import { PRIORITIES, type Card, type CardInput, type Column, type Priority, type User } from "../types";
 import { Avatar } from "./Avatar";
 
 interface Props {
   card: Card | null; // null = creating a new card
-  initialStatus: Status;
+  initialColumnId: number;
+  columns: Column[];
   users: User[];
   currentUser: User;
   canDelete: boolean;
   onClose: () => void;
-  onSave: (input: CardInput, status: Status) => Promise<void>;
+  onSave: (input: CardInput, columnId: number) => Promise<void>;
   onDelete: (card: Card) => Promise<void>;
 }
 
 const dateFmt = new Intl.DateTimeFormat("uk-UA", { dateStyle: "medium", timeStyle: "short" });
 
-export function CardModal({ card, initialStatus, users, currentUser, canDelete, onClose, onSave, onDelete }: Props) {
+export function CardModal({ card, initialColumnId, columns, users, currentUser, canDelete, onClose, onSave, onDelete }: Props) {
   const [title, setTitle] = useState(card?.title ?? "");
   const [description, setDescription] = useState(card?.description ?? "");
-  const [status, setStatus] = useState<Status>(card?.status ?? initialStatus);
+  const [columnId, setColumnId] = useState(card?.columnId ?? initialColumnId);
   const [priority, setPriority] = useState<Priority>(card?.priority ?? "medium");
   const [assigneeId, setAssigneeId] = useState<number | null>(card ? card.assigneeId : currentUser.id);
   const [error, setError] = useState("");
@@ -38,7 +39,7 @@ export function CardModal({ card, initialStatus, users, currentUser, canDelete, 
     setBusy(true);
     setError("");
     try {
-      await onSave({ title, description, priority, assigneeId }, status);
+      await onSave({ title, description, priority, assigneeId }, columnId);
       onClose();
     } catch (err) {
       setError((err as Error).message);
@@ -93,11 +94,11 @@ export function CardModal({ card, initialStatus, users, currentUser, canDelete, 
 
           <aside className="modal-side">
             <label className="field">
-              Статус
-              <select value={status} onChange={(e) => setStatus(e.target.value as Status)}>
-                {COLUMNS.map((c) => (
+              Колонка
+              <select value={columnId} onChange={(e) => setColumnId(Number(e.target.value))}>
+                {columns.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.title}
+                    {c.name}
                   </option>
                 ))}
               </select>

@@ -1,0 +1,254 @@
+import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
+import type { Card, Column, User } from "../types";
+import { Avatar } from "./Avatar";
+
+export interface ColumnState {
+  column: Column;
+  cards: Card[];
+  total: number; // matching the current filters
+  cursor: string | null; // null = everything loaded
+  loading: boolean;
+  error: string;
+}
+
+const PRIORITY_ICON: Record<Card["priority"], { icon: string; color: string; label: string }> = {
+  low: { icon: "↓", color: "#30a7ff", label: "Низький" },
+  medium: { icon: "=", color: "#ff9f0a", label: "Середній" },
+  high: { icon: "↑", color: "#ff6b3d", label: "Високий" },
+  critical: { icon: "⇈", color: "#ff375f", label: "Критичний" },
+};
+
+interface Props {
+  state: ColumnState;
+  index: number;
+  allColumns: Column[];
+  isOwner: boolean;
+  draggingId: number | null;
+  dropBeforeId: number | null | undefined; // undefined = this column isn't the drop target
+  membersById: Map<number, User>;
+  onDragOver: (e: DragEvent<HTMLElement>) => void;
+  onDrop: (e: DragEvent<HTMLElement>) => void;
+  onCardDragStart: (e: DragEvent, card: Card) => void;
+  onCardDragEnd: () => void;
+  onCardClick: (card: Card) => void;
+  onAddCard: () => void;
+  onLoadMore: () => void;
+  onRename: (name: string) => Promise<void>;
+  onMove: (index: number) => Promise<void>;
+  onDelete: (moveTo: number | null) => Promise<void>;
+}
+
+export function BoardColumn(props: Props) {
+  const { state, index, allColumns, isOwner, draggingId, dropBeforeId, membersById } = props;
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menu, setMenu] = useState<"closed" | "open" | "delete">("closed");
+  const [renaming, setRenaming] = useState(false);
+  const [name, setName] = useState(state.column.name);
+  const others = allColumns.filter((c) => c.id !== state.column.id);
+  const [moveTo, setMoveTo] = useState<number | null>(null);
+  const hasMore = state.cursor !== null;
+
+  // Infinite scroll: load the next page when the sentinel at the bottom of the column comes into view.
+  const { onLoadMore } = props;
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasMore || state.loading) return;
+    const io = new IntersectionObserver((entries) => entries[0]?.isIntersecting && onLoadMore(), {
+      root: bodyRef.current,
+      rootMargin: "200px",
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasMore, state.loading, state.cards.length, onLoadMore]);
+
+  useEffect(() => {
+    if (menu === "closed") return;
+    const onClick = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenu("closed");
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [menu]);
+
+  async function submitRename(e: FormEvent) {
+    e.preventDefault();
+    if (name.trim() && name.trim() !== state.column.name) await props.onRename(name.trim());
+    setRenaming(false);
+  }
+
+  return (
+    <section className={`column${dropBeforeId !== undefined ? " column--over" : ""}`} onDragOver={props.onDragOver} onDrop={props.onDrop}>
+      <div className="column-head">
+        {renaming ? (
+          <form onSubmit={submitRename} className="column-rename">
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={submitRename}
+              onKeyDown={(e) => e.key === "Escape" && (setName(state.column.name), setRenaming(false))}
+              maxLength={60}
+              autoFocus
+            />
+          </form>
+        ) : (
+          <span className="column-title" onDoubleClick={() => isOwner && setRenaming(true)}>
+            {state.column.name}
+          </span>
+        )}
+        <span className="column-count">{state.total}</span>
+        <div className="spacer" />
+        {isOwner && (
+          <div className="column-menu-wrap" ref={menuRef}>
+            <button className="icon-btn icon-btn--sm" onClick={() => setMenu(menu === "closed" ? "open" : "closed")} aria-label="Дії з колонкою">
+              ⋯
+            </button>
+            {menu === "open" && (
+              <div className="menu column-menu">
+                <button onClick={() => (setMenu("closed"), setRenaming(true))}>Перейменувати</button>
+                <button disabled={index === 0} onClick={() => (setMenu("closed"), props.onMove(index - 1))}>
+                  ← Перемістити ліворуч
+                </button>
+                <button disabled={index === allColumns.length - 1} onClick={() => (setMenu("closed"), props.onMove(index + 1))}>
+                  Перемістити праворуч →
+                </button>
+                <button
+                  className="menu-danger"
+                  disabled={others.length === 0}
+                  onClick={() => {
+                    setMoveTo(others[Math.max(0, index - 1)]?.id ?? null);
+                    setMenu("delete");
+                  }}
+                >
+                  Видалити колонку
+                </button>
+              </div>
+            )}
+            {menu === "delete" && (
+              <div className="menu column-menu column-menu--form">
+                <strong>Видалити «{state.column.name}»?</strong>
+                <label>
+                  Картки перенести в
+                  <select value={moveTo ?? ""} onChange={(e) => setMoveTo(Number(e.target.value))}>
+                    {others.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="menu-actions">
+                  <button className="btn btn-ghost btn-sm" onClick={() => setMenu("closed")}>
+                    Скасувати
+                  </button>
+                  <button className="btn btn-danger-solid btn-sm" onClick={() => (setMenu("closed"), props.onDelete(moveTo))}>
+                    Видалити
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="column-body" ref={bodyRef}>
+        {state.cards.map((card) => (
+          <div key={card.id} className="card-slot">
+            {dropBeforeId === card.id && <div className="drop-indicator" />}
+            <article
+              data-card-id={card.id}
+              className={`card${draggingId === card.id ? " card--dragging" : ""}`}
+              draggable
+              onDragStart={(e) => props.onCardDragStart(e, card)}
+              onDragEnd={props.onCardDragEnd}
+              onClick={() => props.onCardClick(card)}
+            >
+              <div className="card-title">{card.title}</div>
+              <div className="card-footer">
+                <span
+                  className="priority"
+                  style={{ color: PRIORITY_ICON[card.priority].color }}
+                  title={`Пріоритет: ${PRIORITY_ICON[card.priority].label}`}
+                >
+                  {PRIORITY_ICON[card.priority].icon}
+                </span>
+                <span className="card-key">{card.key}</span>
+                <div className="spacer" />
+                <Avatar user={card.assigneeId ? membersById.get(card.assigneeId) : null} size={24} />
+              </div>
+            </article>
+          </div>
+        ))}
+        {dropBeforeId === null && <div className="drop-indicator" />}
+
+        {hasMore && <div ref={sentinelRef} className="sentinel" />}
+        {state.loading && (
+          <div className="column-status">
+            <span className="spinner" /> Завантаження…
+          </div>
+        )}
+        {state.error && (
+          <div className="column-status column-status--error">
+            {state.error}{" "}
+            <button className="btn btn-link btn-sm" onClick={props.onLoadMore}>
+              Повторити
+            </button>
+          </div>
+        )}
+        {!state.loading && state.cards.length === 0 && !hasMore && <div className="column-empty">Порожньо</div>}
+
+        <button className="add-card" onClick={props.onAddCard}>
+          + Створити задачу
+        </button>
+      </div>
+    </section>
+  );
+}
+
+export function AddColumn({ onAdd }: { onAdd: (name: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setBusy(true);
+    try {
+      await onAdd(name.trim());
+      setName("");
+      setOpen(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button className="add-column" onClick={() => setOpen(true)}>
+        + Додати колонку
+      </button>
+    );
+  }
+  return (
+    <form className="add-column add-column--open" onSubmit={submit}>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
+        placeholder="Назва колонки"
+        maxLength={60}
+        autoFocus
+      />
+      <div className="menu-actions">
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>
+          Скасувати
+        </button>
+        <button className="btn btn-primary btn-sm" disabled={busy || !name.trim()}>
+          Додати
+        </button>
+      </div>
+    </form>
+  );
+}
