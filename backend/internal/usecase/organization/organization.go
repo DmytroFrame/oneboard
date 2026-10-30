@@ -76,6 +76,8 @@ type Service struct {
 	index       SearchIndex
 	files       AttachmentFiles
 	storage     FileStorage
+	boardEvents usecase.BoardEvents
+	userEvents  usecase.UserEvents
 	tx          usecase.Transactor
 	log         *slog.Logger
 }
@@ -90,12 +92,35 @@ type Deps struct {
 	Index       SearchIndex
 	Files       AttachmentFiles
 	Storage     FileStorage
+	BoardEvents usecase.BoardEvents
+	UserEvents  usecase.UserEvents
 	Tx          usecase.Transactor
 	Log         *slog.Logger
 }
 
 func NewService(d Deps) *Service {
-	return &Service{d.Orgs, d.Members, d.Invitations, d.Users, d.Projects, d.Index, d.Files, d.Storage, d.Tx, d.Log}
+	return &Service{d.Orgs, d.Members, d.Invitations, d.Users, d.Projects, d.Index, d.Files, d.Storage, d.BoardEvents, d.UserEvents, d.Tx, d.Log}
+}
+
+// ---------- real-time notifications (best-effort, after the change is committed) ----------
+
+// tellUser lets a user know their access to the organization changed.
+func (s *Service) tellUser(ctx context.Context, userID, actorID int64, reason domain.AccessReason, org domain.Organization) {
+	s.userEvents.PublishUser(ctx, domain.UserEvent{
+		Type: domain.UserAccessChanged, UserID: userID, Reason: reason, OrgID: org.ID, Name: org.Name, ActorID: actorID,
+	})
+}
+
+// tellMembers refreshes the member list for everyone in the organization.
+func (s *Service) tellMembers(ctx context.Context, orgID, actorID int64) {
+	members, err := s.members.List(ctx, orgID)
+	if err != nil {
+		s.log.Warn("notify organization members", "org", orgID, "err", err)
+		return
+	}
+	for _, m := range members {
+		s.userEvents.PublishUser(ctx, domain.UserEvent{Type: domain.UserOrgMembersChanged, UserID: m.ID, OrgID: orgID, ActorID: actorID})
+	}
 }
 
 // role returns the user's role, or ErrOrgNotFound for outsiders (who can't tell it exists).
@@ -152,7 +177,15 @@ func (s *Service) Rename(ctx context.Context, userID, orgID int64, name string) 
 	if err := s.orgs.Rename(ctx, orgID, name); err != nil {
 		return domain.Organization{}, err
 	}
-	return s.orgs.GetForUser(ctx, orgID, userID)
+	org, err := s.orgs.GetForUser(ctx, orgID, userID)
+	if err == nil {
+		if members, lerr := s.members.List(ctx, orgID); lerr == nil {
+			for _, m := range members {
+				s.tellUser(ctx, m.ID, userID, domain.AccessRenamed, org)
+			}
+		}
+	}
+	return org, err
 }
 
 // Delete removes the organization with all its projects, cards and files.
@@ -163,6 +196,14 @@ func (s *Service) Delete(ctx context.Context, userID, orgID int64) error {
 	}
 	if !role.CanDelete() {
 		return domain.ErrOrgOwnerOnly
+	}
+	org, err := s.orgs.GetForUser(ctx, orgID, userID)
+	if err != nil {
+		return err
+	}
+	members, err := s.members.List(ctx, orgID)
+	if err != nil {
+		return err
 	}
 	projectIDs, err := s.orgs.ProjectIDs(ctx, orgID)
 	if err != nil {
@@ -183,6 +224,12 @@ func (s *Service) Delete(ctx context.Context, userID, orgID int64) error {
 	}
 	if err := s.storage.DeleteMany(ctx, keys); err != nil {
 		s.log.Error("storage: delete organization files", "org", orgID, "err", err)
+	}
+	for _, id := range projectIDs {
+		s.boardEvents.Publish(ctx, domain.BoardEvent{Type: domain.EventProjectDeleted, ProjectID: id, ActorID: userID})
+	}
+	for _, m := range members {
+		s.tellUser(ctx, m.ID, userID, domain.AccessDeleted, org)
 	}
 	return nil
 }
@@ -227,6 +274,10 @@ func (s *Service) Invite(ctx context.Context, userID, orgID int64, email string,
 			}
 			return InviteResult{}, err
 		}
+		if org, err := s.orgs.GetForUser(ctx, orgID, userID); err == nil {
+			s.tellUser(ctx, u.ID, userID, domain.AccessAdded, org)
+		}
+		s.tellMembers(ctx, orgID, userID)
 		return InviteResult{Added: true}, nil
 	case errors.Is(err, domain.ErrNoRows):
 		if err := s.invitations.Create(ctx, orgID, email, role, userID); err != nil {
@@ -292,6 +343,10 @@ func (s *Service) ChangeRole(ctx context.Context, userID, orgID, targetID int64,
 	if err != nil {
 		return nil, err
 	}
+	if org, err := s.orgs.GetForUser(ctx, orgID, targetID); err == nil {
+		s.tellUser(ctx, targetID, userID, domain.AccessRole, org)
+	}
+	s.tellMembers(ctx, orgID, userID)
 	return s.members.List(ctx, orgID)
 }
 
@@ -313,7 +368,15 @@ func (s *Service) RemoveMember(ctx context.Context, userID, orgID, targetID int6
 	if err != nil {
 		return err
 	}
-	return s.tx.WithinTx(ctx, func(ctx context.Context) error {
+	org, err := s.orgs.GetForUser(ctx, orgID, userID)
+	if err != nil {
+		return err
+	}
+	projectIDs, err := s.orgs.ProjectIDs(ctx, orgID)
+	if err != nil {
+		return err
+	}
+	err = s.tx.WithinTx(ctx, func(ctx context.Context) error {
 		target, err := s.members.Role(ctx, orgID, targetID)
 		if err != nil {
 			return err
@@ -344,4 +407,14 @@ func (s *Service) RemoveMember(ctx context.Context, userID, orgID, targetID int6
 		}
 		return s.members.Remove(ctx, orgID, targetID)
 	})
+	if err != nil {
+		return err
+	}
+	// The removed user loses every board of the organization; the remaining people see the change.
+	for _, id := range projectIDs {
+		s.boardEvents.Publish(ctx, domain.BoardEvent{Type: domain.EventMembersChanged, ProjectID: id, ActorID: userID, RemovedUserID: targetID})
+	}
+	s.tellUser(ctx, targetID, userID, domain.AccessRemoved, org)
+	s.tellMembers(ctx, orgID, userID)
+	return nil
 }

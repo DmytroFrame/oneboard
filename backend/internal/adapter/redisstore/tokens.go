@@ -16,7 +16,9 @@ import (
 
 	"clodapp/backend/internal/config"
 	"clodapp/backend/internal/domain"
+	"clodapp/backend/internal/usecase"
 	"clodapp/backend/internal/usecase/auth"
+	"clodapp/backend/internal/usecase/collab"
 )
 
 var Module = fx.Module("redis",
@@ -26,11 +28,18 @@ var Module = fx.Module("redis",
 		NewDenylist,
 		func(s *RefreshStore) auth.RefreshTokens { return s },
 		func(d *Denylist) auth.Revocations { return d },
+
+		NewBus, NewPresence, NewDocLog,
+		func(b *Bus) usecase.BoardEvents { return b },
+		func(b *Bus) usecase.UserEvents { return b },
+		func(b *Bus) collab.Broker { return b },
+		func(p *Presence) collab.Presence { return p },
+		func(d *DocLog) collab.DocLog { return d },
 	),
 )
 
 func NewClient(lc fx.Lifecycle, cfg config.Config) (*redis.Client, error) {
-	c := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr, Password: cfg.RedisPassword})
+	c := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr, Password: cfg.RedisPassword, DB: cfg.RedisDB})
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := c.Ping(ctx).Err(); err != nil {

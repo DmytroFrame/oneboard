@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -29,6 +30,7 @@ type Config struct {
 
 	RedisAddr     string
 	RedisPassword string
+	RedisDB       int
 
 	OpenSearchURL      string
 	OpenSearchUser     string
@@ -78,6 +80,11 @@ func Load() (Config, error) {
 		return Config{}, errors.New("JWT_SECRET must be set to at least 32 characters (see .env)")
 	}
 
+	redisDB, err := strconv.Atoi(env("REDIS_DB", "0"))
+	if err != nil {
+		return Config{}, fmt.Errorf("REDIS_DB: %w", err)
+	}
+
 	c := Config{
 		Addr:          env("ADDR", ":8080"),
 		StaticDir:     env("STATIC_DIR", "../frontend/dist"),
@@ -92,6 +99,7 @@ func Load() (Config, error) {
 
 		RedisAddr:     env("REDIS_ADDR", "localhost:6379"),
 		RedisPassword: env("REDIS_PASSWORD", ""),
+		RedisDB:       redisDB,
 
 		OpenSearchURL:      env("OPENSEARCH_URL", "https://localhost:9200"),
 		OpenSearchUser:     env("OPENSEARCH_USER", "admin"),

@@ -69,6 +69,8 @@ type Service struct {
 	index    SearchIndex
 	files    AttachmentFiles
 	storage  FileStorage
+	events   usecase.BoardEvents
+	users    usecase.UserEvents
 	tx       usecase.Transactor
 	log      *slog.Logger
 }
@@ -83,12 +85,27 @@ type Deps struct {
 	Index    SearchIndex
 	Files    AttachmentFiles
 	Storage  FileStorage
+	Events   usecase.BoardEvents
+	Users    usecase.UserEvents
 	Tx       usecase.Transactor
 	Log      *slog.Logger
 }
 
 func NewService(d Deps) *Service {
-	return &Service{d.Projects, d.Members, d.Columns, d.Cards, d.Orgs, d.Index, d.Files, d.Storage, d.Tx, d.Log}
+	return &Service{d.Projects, d.Members, d.Columns, d.Cards, d.Orgs, d.Index, d.Files, d.Storage, d.Events, d.Users, d.Tx, d.Log}
+}
+
+// tellUser lets a user know their access to the project changed (in every tab they have open).
+func (s *Service) tellUser(ctx context.Context, userID, actorID int64, reason domain.AccessReason, p domain.Project) {
+	s.users.PublishUser(ctx, domain.UserEvent{
+		Type: domain.UserAccessChanged, UserID: userID, Reason: reason, OrgID: p.OrgID, ProjectID: p.ID, Name: p.Name, ActorID: actorID,
+	})
+}
+
+func (s *Service) tellMembers(ctx context.Context, members []domain.Member, actorID int64, reason domain.AccessReason, p domain.Project) {
+	for _, m := range members {
+		s.tellUser(ctx, m.ID, actorID, reason, p)
+	}
 }
 
 func (s *Service) List(ctx context.Context, userID int64) ([]domain.Project, error) {
@@ -155,11 +172,25 @@ func (s *Service) Rename(ctx context.Context, userID, projectID int64, name stri
 	if err := s.projects.Rename(ctx, projectID, name); err != nil {
 		return domain.Project{}, err
 	}
-	return s.projects.GetForUser(ctx, projectID, userID)
+	p, err := s.projects.GetForUser(ctx, projectID, userID)
+	if err == nil {
+		if members, lerr := s.members.List(ctx, projectID); lerr == nil {
+			s.tellMembers(ctx, members, userID, domain.AccessRenamed, p)
+		}
+	}
+	return p, err
 }
 
 func (s *Service) Delete(ctx context.Context, userID, projectID int64) error {
 	if err := usecase.RequireOwner(ctx, s.members, projectID, userID, notFound); err != nil {
+		return err
+	}
+	p, err := s.projects.GetForUser(ctx, projectID, userID)
+	if err != nil {
+		return err
+	}
+	members, err := s.members.List(ctx, projectID)
+	if err != nil {
 		return err
 	}
 	keys, err := s.files.KeysForProjects(ctx, []int64{projectID})
@@ -175,6 +206,8 @@ func (s *Service) Delete(ctx context.Context, userID, projectID int64) error {
 	if err := s.storage.DeleteMany(ctx, keys); err != nil {
 		s.log.Error("storage: delete project files", "project", projectID, "err", err)
 	}
+	s.events.Publish(ctx, domain.BoardEvent{Type: domain.EventProjectDeleted, ProjectID: projectID, ActorID: userID})
+	s.tellMembers(ctx, members, userID, domain.AccessDeleted, p)
 	return nil
 }
 
@@ -207,6 +240,8 @@ func (s *Service) AddMember(ctx context.Context, userID, projectID, targetID int
 		}
 		return nil, err
 	}
+	s.events.Publish(ctx, domain.BoardEvent{Type: domain.EventMembersChanged, ProjectID: projectID, ActorID: userID})
+	s.tellUser(ctx, targetID, userID, domain.AccessAdded, p)
 	return s.members.List(ctx, projectID)
 }
 
@@ -229,10 +264,19 @@ func (s *Service) RemoveMember(ctx context.Context, userID, projectID, targetID 
 	case role != domain.RoleOwner && targetID != userID:
 		return domain.ErrOwnerOnly
 	}
-	return s.tx.WithinTx(ctx, func(ctx context.Context) error {
+	proj, err := s.projects.GetForUser(ctx, projectID, userID) // read before a self-removal hides it
+	if err != nil {
+		return err
+	}
+	err = s.tx.WithinTx(ctx, func(ctx context.Context) error {
 		if err := s.members.Remove(ctx, projectID, targetID); err != nil {
 			return err
 		}
 		return s.cards.UnassignUser(ctx, projectID, targetID)
 	})
+	if err == nil {
+		s.events.Publish(ctx, domain.BoardEvent{Type: domain.EventMembersChanged, ProjectID: projectID, ActorID: userID, RemovedUserID: targetID})
+		s.tellUser(ctx, targetID, userID, domain.AccessRemoved, proj)
+	}
+	return err
 }

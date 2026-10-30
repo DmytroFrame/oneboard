@@ -53,3 +53,29 @@ func NotFoundAs(err error, notFound error) error {
 	}
 	return err
 }
+
+// BoardEvents broadcasts committed board changes to everyone viewing the board.
+// Publishing is best-effort: the database is the source of truth.
+type BoardEvents interface {
+	Publish(ctx context.Context, e domain.BoardEvent)
+}
+
+type originKey struct{}
+
+// WithOrigin marks the request as coming from a real-time connection (a browser tab), so board events
+// caused by it can be skipped by that tab, which already shows the change, and applied by every other.
+func WithOrigin(ctx context.Context, connID string) context.Context {
+	return context.WithValue(ctx, originKey{}, connID)
+}
+
+// OriginFrom returns the connection id set by WithOrigin, or "".
+func OriginFrom(ctx context.Context) string {
+	s, _ := ctx.Value(originKey{}).(string)
+	return s
+}
+
+// UserEvents notifies users (in every tab they have open) about changes to their access.
+// Best-effort, like BoardEvents.
+type UserEvents interface {
+	PublishUser(ctx context.Context, e domain.UserEvent)
+}

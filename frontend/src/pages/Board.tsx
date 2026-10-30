@@ -1,19 +1,26 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Avatar } from "../components/Avatar";
 import { AddColumn, BoardColumn, type ColumnState } from "../components/BoardColumn";
-import { CardModal } from "../components/CardModal";
+import { LiveCursors } from "../components/LiveCursors";
 import { ProjectSettingsModal } from "../components/ProjectModals";
+import { anchorAt, type BoardEvent } from "../realtime";
 import type { Attachment, Card, CardCover, CardFilters, CardInput, Column, Member, Project } from "../types";
+import { useBoardRealtime } from "../useBoardRealtime";
 import { useLayout } from "./AppLayout";
+
+// The editor (TipTap) and CRDT (Yjs) are heavy: load them when a task is first opened.
+const CardModal = lazy(() => import("../components/CardModal").then((m) => ({ default: m.CardModal })));
 
 const VISIBLE_AVATARS = 6;
 const PAGE_SIZE = 20;
 
-type ModalState = { card: Card | null; columnId: number } | null;
+// cardId null = creating a new card. The card itself is looked up live, so edits by others show up.
+type ModalState = { cardId: number | null; columnId: number; snapshot: Card | null } | null;
+const POINTER_INTERVAL = 40; // ms between cursor messages
 type DropTarget = { columnId: number; beforeId: number | null } | null;
 
 /** Route wrapper: remounts the board when switching projects so all state resets. */
@@ -55,6 +62,9 @@ function Board({ project }: { project: Project }) {
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget>(null);
   const teamRef = useRef<HTMLDivElement>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const lastPointer = useRef(0);
+  const trailingPointer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Latest columns state for async callbacks; generation discards responses from stale filter sets.
   const colsRef = useRef(cols);
@@ -146,6 +156,116 @@ function Board({ project }: { project: Project }) {
   const membersById = useMemo(() => new Map(members.map((u) => [u.id, u])), [members]);
   const columns = useMemo(() => cols.map((s) => s.column), [cols]);
 
+  // ---------- real time ----------
+
+  const { socket, peers, live, connected, clearDrag } = useBoardRealtime(project.id, handleEvent);
+  const findCard = useCallback((id: number) => {
+    for (const s of colsRef.current) {
+      const c = s.cards.find((x) => x.id === id);
+      if (c) return c;
+    }
+    return undefined;
+  }, []);
+  const onlineIds = useMemo(() => new Set([me.id, ...peers.map((p) => p.userId)]), [peers, me.id]);
+  const remoteDragIds = useMemo(() => new Set(peers.flatMap((p) => (p.drag ? [p.drag.cardId] : []))), [peers]);
+
+  // Tell the others which task we have open (re-sent after a reconnect).
+  const focusCardId = modal?.cardId ?? null;
+  useEffect(() => {
+    if (connected) socket?.send({ type: "focus", cardId: focusCardId });
+  }, [socket, connected, focusCardId]);
+
+  /** Throttled, but the last position is always sent, so a cursor never stops short of where the pointer did. */
+  function sendPointer(type: "cursor" | "drag", e: { target: EventTarget | null; clientX: number; clientY: number }) {
+    const board = boardRef.current;
+    if (!board || !socket) return;
+    // Resolve now: the event's target and coordinates are only valid during the event.
+    const anchor = anchorAt(e.target as Element | null, e.clientX, e.clientY, board);
+    const msg = type === "drag" ? { type, cardId: draggingId, anchor } : { type, anchor };
+    const send = () => {
+      lastPointer.current = performance.now();
+      trailingPointer.current = null;
+      socket.send(msg);
+    };
+    if (trailingPointer.current) clearTimeout(trailingPointer.current);
+    const wait = POINTER_INTERVAL - (performance.now() - lastPointer.current);
+    if (wait <= 0) send();
+    else trailingPointer.current = setTimeout(send, wait);
+  }
+
+  function replaceCard(card: Card) {
+    setCols((prev) => prev.map((s) => (s.cards.some((c) => c.id === card.id) ? { ...s, cards: s.cards.map((c) => (c.id === card.id ? card : c)) } : s)));
+  }
+
+  /** Places a card someone else moved among the cards loaded here, using its new neighbours. */
+  function applyRemoteMove(e: BoardEvent) {
+    const card = e.card!;
+    setCols((prev) =>
+      prev.map((s) => {
+        let cards = s.cards.filter((c) => c.id !== card.id);
+        let total = s.total;
+        if (s.column.id === e.fromColumnId) total -= 1;
+        if (s.column.id === card.columnId) {
+          total += 1;
+          let idx = -1;
+          if (e.afterId != null) {
+            const i = cards.findIndex((c) => c.id === e.afterId);
+            if (i >= 0) idx = i + 1;
+          }
+          if (idx < 0 && e.beforeId != null) idx = cards.findIndex((c) => c.id === e.beforeId);
+          if (idx < 0 && e.afterId == null) idx = 0; // moved to the top
+          if (idx < 0 && e.beforeId == null && s.cursor === null) idx = cards.length; // bottom of a fully loaded column
+          if (idx >= 0) cards = [...cards.slice(0, idx), card, ...cards.slice(idx)];
+        }
+        return cards === s.cards && total === s.total ? s : { ...s, cards, total: Math.max(0, total) };
+      }),
+    );
+  }
+
+  /**
+   * Committed board changes arrive here — from other people and from our own other tabs. Only the
+   * tab that made a change skips it (it already shows it); that's told by the connection, not the user.
+   */
+  function handleEvent(e: BoardEvent) {
+    const mine = !!e.origin && e.origin === socket?.connId;
+    switch (e.type) {
+      case "card.updated":
+        if (e.card) replaceCard(e.card);
+        break;
+      case "card.created":
+        if (mine || !e.card) break;
+        if (hasFilters) return void reset();
+        patchCol(e.card.columnId, (s) =>
+          s.cards.some((c) => c.id === e.card!.id) ? {} : { cards: s.cursor === null ? [...s.cards, e.card!] : s.cards, total: s.total + 1 },
+        );
+        break;
+      case "card.moved":
+        if (e.card) clearDrag(e.card.id); // the drop happened: no more ghost, whatever messages got lost
+        if (mine || !e.card) break;
+        if (hasFilters) return void reset();
+        applyRemoteMove(e);
+        break;
+      case "card.deleted":
+        if (modal?.cardId === e.cardId) setModal(null);
+        if (mine) break;
+        patchCol(e.columnId!, (s) => ({ cards: s.cards.filter((c) => c.id !== e.cardId), total: Math.max(0, s.total - 1) }));
+        break;
+      case "columns.changed":
+        if (!mine) reset();
+        break;
+      case "members.changed":
+        reloadMembers();
+        if (!mine) {
+          reloadProjects(); // if we were the one removed, the project disappears and we leave the board
+          reset();
+        }
+        break;
+      case "project.deleted":
+        reloadProjects();
+        break;
+    }
+  }
+
   // Current user first, then everyone else alphabetically — like Jira's avatar group.
   const orderedMembers = useMemo(
     () => [...members].sort((a, b) => (a.id === me.id ? -1 : b.id === me.id ? 1 : a.name.localeCompare(b.name))),
@@ -214,6 +334,10 @@ function Board({ project }: { project: Project }) {
   function onDragEnd() {
     setDraggingId(null);
     setDropTarget(null);
+    // A throttled drag position may still be pending; it must not re-announce the drag after it ended.
+    if (trailingPointer.current) clearTimeout(trailingPointer.current);
+    trailingPointer.current = null;
+    socket?.send({ type: "drag", cardId: null });
   }
 
   function onColumnDragOver(e: DragEvent<HTMLElement>, columnId: number) {
@@ -286,25 +410,26 @@ function Board({ project }: { project: Project }) {
 
   // ---------- CRUD ----------
 
-  async function saveCard(input: CardInput, columnId: number) {
-    if (!modal) return;
-    if (modal.card === null) {
-      const created = await api.createCard(project.id, { ...input, columnId });
-      // New cards go to the bottom: show it only if the column is fully loaded.
-      patchCol(columnId, (s) => ({ cards: s.cursor === null ? [...s.cards, created] : s.cards, total: s.total + 1 }));
-    } else {
-      const old = modal.card;
-      let saved = await api.updateCard(old.id, input);
-      if (columnId !== old.columnId) {
-        saved = await api.moveCard(old.id, columnId);
-        patchCol(old.columnId, (s) => ({ cards: s.cards.filter((c) => c.id !== old.id), total: s.total - 1 }));
-        patchCol(columnId, (s) => ({ cards: s.cursor === null ? [...s.cards, saved] : s.cards, total: s.total + 1 }));
-      } else {
-        patchCol(columnId, (s) => ({ cards: s.cards.map((c) => (c.id === old.id ? saved : c)) }));
-      }
-    }
+  async function createCard(input: CardInput, columnId: number) {
+    const created = await api.createCard(project.id, { ...input, columnId });
+    // New cards go to the bottom: show it only if the column is fully loaded.
+    patchCol(columnId, (s) => ({ cards: s.cursor === null ? [...s.cards, created] : s.cards, total: s.total + 1 }));
     reloadProjects();
     reloadMembers();
+  }
+
+  async function updateCard(card: Card, input: CardInput) {
+    const saved = await api.updateCard(card.id, input);
+    replaceCard(saved);
+    if (input.assigneeId !== card.assigneeId) reloadMembers();
+  }
+
+  async function moveCardTo(card: Card, columnId: number) {
+    if (columnId === card.columnId) return;
+    const saved = await api.moveCard(card.id, columnId);
+    patchCol(card.columnId, (s) => ({ cards: s.cards.filter((c) => c.id !== card.id), total: s.total - 1 }));
+    patchCol(columnId, (s) => ({ cards: s.cursor === null ? [...s.cards, saved] : s.cards, total: s.total + 1 }));
+    setModal((m) => (m && m.cardId === card.id ? { ...m, columnId, snapshot: saved } : m));
   }
 
   /** Keeps the card face (file count, cover) in sync with what the modal uploaded or deleted. */
@@ -326,10 +451,24 @@ function Board({ project }: { project: Project }) {
   // ---------- render ----------
 
   const overflow = orderedMembers.length - VISIBLE_AVATARS;
+  const modalCard = modal?.cardId ? (findCard(modal.cardId) ?? modal.snapshot) : null;
+  const peersHere = modal?.cardId
+    ? [...new Set(peers.filter((p) => p.cardId === modal.cardId).map((p) => p.userId))].flatMap((id) => membersById.get(id) ?? [])
+    : [];
   const onlyMine = selectedUsers.size === 1 && selectedUsers.has(me.id);
 
   return (
-    <div className="board">
+    <div
+      className="board"
+      ref={boardRef}
+      onPointerMove={(e) => sendPointer("cursor", e)}
+      onPointerLeave={() => {
+        if (trailingPointer.current) clearTimeout(trailingPointer.current);
+        trailingPointer.current = null;
+        socket?.send({ type: "cursor", anchor: null });
+      }}
+      onDragOver={(e) => draggingId !== null && sendPointer("drag", e)}
+    >
       <div className="board-head">
         <div>
           <div className="breadcrumbs">{t("board.breadcrumbs", { name: project.name })}</div>
@@ -342,7 +481,7 @@ function Board({ project }: { project: Project }) {
           <button
             className="btn btn-primary"
             disabled={columns.length === 0}
-            onClick={() => setModal({ card: null, columnId: columns[0]!.id })}
+            onClick={() => setModal({ cardId: null, columnId: columns[0]!.id, snapshot: null })}
           >
             {t("board.create")}
           </button>
@@ -354,7 +493,14 @@ function Board({ project }: { project: Project }) {
 
         <div className="avatar-group">
           {orderedMembers.slice(0, VISIBLE_AVATARS).map((u) => (
-            <Avatar key={u.id} user={u} size={32} active={selectedUsers.has(u.id)} onClick={() => toggleUser(u.id)} />
+            <Avatar
+              key={u.id}
+              user={u}
+              size={32}
+              active={selectedUsers.has(u.id)}
+              online={onlineIds.has(u.id)}
+              onClick={() => toggleUser(u.id)}
+            />
           ))}
           <div className="team-dropdown" ref={teamRef}>
             <button
@@ -371,7 +517,7 @@ function Board({ project }: { project: Project }) {
                 {orderedMembers.map((u) => (
                   <label key={u.id} className="team-row">
                     <input type="checkbox" checked={selectedUsers.has(u.id)} onChange={() => toggleUser(u.id)} />
-                    <Avatar user={u} size={28} />
+                    <Avatar user={u} size={28} online={onlineIds.has(u.id)} />
                     <span className="team-row-name">
                       <span>
                         {u.name}
@@ -448,8 +594,9 @@ function Board({ project }: { project: Project }) {
               onDrop={(e) => onColumnDrop(e, s.column.id)}
               onCardDragStart={onDragStart}
               onCardDragEnd={onDragEnd}
-              onCardClick={(card) => setModal({ card, columnId: card.columnId })}
-              onAddCard={() => setModal({ card: null, columnId: s.column.id })}
+              onCardClick={(card) => setModal({ cardId: card.id, columnId: card.columnId, snapshot: card })}
+              onAddCard={() => setModal({ cardId: null, columnId: s.column.id, snapshot: null })}
+              remoteDragIds={remoteDragIds}
               onLoadMore={() => loadMore(s.column.id)}
               onRename={(name) => columnAction(() => api.renameColumn(s.column.id, name))}
               onMove={(index) => columnAction(() => api.moveColumn(s.column.id, index))}
@@ -461,21 +608,29 @@ function Board({ project }: { project: Project }) {
       )}
 
       {modal && (
+        <Suspense fallback={<div className="modal-backdrop" />}>
         <CardModal
-          key={modal.card?.id ?? "new"}
-          card={modal.card}
+          key={modal.cardId ?? "new"}
+          card={modalCard}
           initialColumnId={modal.columnId}
           columns={columns}
           users={orderedMembers}
           currentUser={me}
-          canDelete={!!modal.card && (modal.card.authorId === me.id || isOwner)}
+          canDelete={!!modalCard && (modalCard.authorId === me.id || isOwner)}
           isProjectOwner={isOwner}
+          socket={socket}
+          peersHere={peersHere}
           onAttachmentsChange={onAttachmentsChange}
           onClose={() => setModal(null)}
-          onSave={saveCard}
+          onCreate={createCard}
+          onUpdate={updateCard}
+          onMove={moveCardTo}
           onDelete={deleteCard}
         />
+        </Suspense>
       )}
+
+      <LiveCursors boardRef={boardRef} peers={peers} live={live} usersById={membersById} findCard={findCard} />
 
       {settingsOpen && (
         <ProjectSettingsModal

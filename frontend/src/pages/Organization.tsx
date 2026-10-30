@@ -20,7 +20,7 @@ export default function OrganizationRoute() {
 function OrganizationPage({ org }: { org: Organization }) {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
-  const { projects, reload, openCreateProject } = useLayout();
+  const { projects, reload, openCreateProject, orgMembersSignal } = useLayout();
   const navigate = useNavigate();
   const me = user!;
   const role = org.role;
@@ -46,6 +46,11 @@ function OrganizationPage({ org }: { org: Organization }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Someone else invited, removed or re-roled a member: refresh the lists.
+  useEffect(() => {
+    if (orgMembersSignal.orgId === org.id) load();
+  }, [orgMembersSignal, org.id, load]);
 
   async function run(action: () => Promise<void>) {
     setBusy(true);

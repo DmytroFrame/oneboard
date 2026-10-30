@@ -48,6 +48,14 @@ export function Attachments({ card, currentUserId, isProjectOwner, onChange }: P
       .catch((err) => setError((err as Error).message));
   }, [card.id]);
 
+  // Someone else added or removed a file (the card's count changed): reload the list.
+  useEffect(() => {
+    if (items && uploading.length === 0 && card.attachmentCount !== items.length) {
+      api.attachments(card.id).then(setItems).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card.attachmentCount]);
+
   // Report every change, including the first load (which also corrects a stale count on the card).
   useEffect(() => {
     if (items) onChangeRef.current(items);

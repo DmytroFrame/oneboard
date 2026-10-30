@@ -23,6 +23,7 @@ import (
 	"clodapp/backend/internal/usecase/attachment"
 	"clodapp/backend/internal/usecase/auth"
 	"clodapp/backend/internal/usecase/board"
+	"clodapp/backend/internal/usecase/collab"
 	"clodapp/backend/internal/usecase/dashboard"
 	"clodapp/backend/internal/usecase/organization"
 	"clodapp/backend/internal/usecase/project"
@@ -53,6 +54,7 @@ var Module = fx.Module("postgres",
 		func(r *CardRepo) project.Cards { return r },
 		func(r *CardRepo) board.Cards { return r },
 		func(r *CardRepo) attachment.Cards { return r },
+		func(r *CardRepo) collab.Cards { return r },
 
 		func(r *OrgRepo) organization.Organizations { return r },
 		func(r *OrgMemberRepo) organization.Members { return r },

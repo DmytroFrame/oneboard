@@ -63,11 +63,30 @@ type Service struct {
 	members     usecase.Memberships
 	storage     Storage
 	thumbs      Thumbnailer
+	events      usecase.BoardEvents
 	log         *slog.Logger
 }
 
-func NewService(a Attachments, c Cards, m usecase.Memberships, s Storage, t Thumbnailer, log *slog.Logger) *Service {
-	return &Service{attachments: a, cards: c, members: m, storage: s, thumbs: t, log: log}
+type Deps struct {
+	fx.In
+	Attachments Attachments
+	Cards       Cards
+	Members     usecase.Memberships
+	Storage     Storage
+	Thumbs      Thumbnailer
+	Events      usecase.BoardEvents
+	Log         *slog.Logger
+}
+
+func NewService(d Deps) *Service {
+	return &Service{d.Attachments, d.Cards, d.Members, d.Storage, d.Thumbs, d.Events, d.Log}
+}
+
+// cardChanged tells the board the card's file count / cover changed.
+func (s *Service) cardChanged(ctx context.Context, userID, cardID int64) {
+	if c, err := s.cards.Get(ctx, cardID); err == nil {
+		s.events.Publish(ctx, domain.BoardEvent{Type: domain.EventCardUpdated, ProjectID: c.ProjectID, ActorID: userID, Card: &c})
+	}
 }
 
 // card loads a card and checks the user's access to its project.
@@ -165,6 +184,7 @@ func (s *Service) Upload(ctx context.Context, userID, cardID int64, up Upload) (
 		s.deleteObjects(ctx, a)
 		return domain.Attachment{}, err
 	}
+	s.cardChanged(ctx, userID, cardID)
 	return a, nil
 }
 
@@ -213,6 +233,7 @@ func (s *Service) Delete(ctx context.Context, userID, attachmentID int64) (domai
 		return a, err
 	}
 	s.deleteObjects(ctx, a)
+	s.cardChanged(ctx, userID, a.CardID)
 	return a, nil
 }
 

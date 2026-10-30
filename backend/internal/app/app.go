@@ -22,6 +22,7 @@ import (
 	"clodapp/backend/internal/usecase/attachment"
 	"clodapp/backend/internal/usecase/auth"
 	"clodapp/backend/internal/usecase/board"
+	"clodapp/backend/internal/usecase/collab"
 	"clodapp/backend/internal/usecase/dashboard"
 	"clodapp/backend/internal/usecase/organization"
 	"clodapp/backend/internal/usecase/project"
@@ -56,6 +57,8 @@ func New() *fx.App {
 		organization.Module,
 		attachment.Module,
 		dashboard.Module,
+		collab.Module,
+		fx.Provide(func(a *auth.Service) collab.Authenticator { return a }),
 
 		// Delivery.
 		httpapi.Module,

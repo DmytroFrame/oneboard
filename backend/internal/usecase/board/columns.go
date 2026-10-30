@@ -17,11 +17,18 @@ type ColumnService struct {
 	columns Columns
 	cards   Cards
 	members Members
+	events  usecase.BoardEvents
 	tx      usecase.Transactor
 }
 
-func NewColumnService(columns Columns, cards Cards, members Members, tx usecase.Transactor) *ColumnService {
-	return &ColumnService{columns: columns, cards: cards, members: members, tx: tx}
+func NewColumnService(columns Columns, cards Cards, members Members, events usecase.BoardEvents, tx usecase.Transactor) *ColumnService {
+	return &ColumnService{columns: columns, cards: cards, members: members, events: events, tx: tx}
+}
+
+// changed tells the board its columns changed and returns the new list.
+func (s *ColumnService) changed(ctx context.Context, userID, projectID int64) ([]domain.Column, error) {
+	s.events.Publish(ctx, domain.BoardEvent{Type: domain.EventColumnsChanged, ProjectID: projectID, ActorID: userID})
+	return s.columns.List(ctx, projectID)
 }
 
 func validColumnName(name string) (string, error) {
@@ -57,7 +64,7 @@ func (s *ColumnService) Create(ctx context.Context, userID, projectID int64, nam
 	if err := s.columns.Create(ctx, projectID, name); err != nil {
 		return nil, err
 	}
-	return s.columns.List(ctx, projectID)
+	return s.changed(ctx, userID, projectID)
 }
 
 // ownedColumn loads a column and requires userID to own its project.
@@ -80,7 +87,7 @@ func (s *ColumnService) Rename(ctx context.Context, userID, columnID int64, name
 	if err := s.columns.Rename(ctx, col.ID, name); err != nil {
 		return nil, err
 	}
-	return s.columns.List(ctx, col.ProjectID)
+	return s.changed(ctx, userID, col.ProjectID)
 }
 
 // Move puts the column at index among the project's columns.
@@ -107,7 +114,7 @@ func (s *ColumnService) Move(ctx context.Context, userID, columnID int64, index 
 	if err != nil {
 		return nil, err
 	}
-	return s.columns.List(ctx, col.ProjectID)
+	return s.changed(ctx, userID, col.ProjectID)
 }
 
 // Delete removes a column. If it has cards, moveTo is required and they are appended to that column.
@@ -153,5 +160,5 @@ func (s *ColumnService) Delete(ctx context.Context, userID, columnID int64, move
 	if err != nil {
 		return nil, err
 	}
-	return s.columns.List(ctx, col.ProjectID)
+	return s.changed(ctx, userID, col.ProjectID)
 }

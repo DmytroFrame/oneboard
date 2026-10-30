@@ -24,6 +24,7 @@ func NewCardHandler(cards *board.CardService, present *Presenter) *CardHandler {
 func (h *CardHandler) Mount(_, private chi.Router) {
 	private.Get("/projects/{id}/cards", h.list)
 	private.Post("/projects/{id}/cards", h.create)
+	private.Get("/cards/{id}", h.get)
 	private.Put("/cards/{id}", h.update)
 	private.Post("/cards/{id}/move", h.move)
 	private.Delete("/cards/{id}", h.delete)
@@ -103,6 +104,19 @@ func (h *CardHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, h.present.Card(c))
+}
+
+func (h *CardHandler) get(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	c, err := h.cards.Get(r.Context(), currentUser(r).ID, id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, h.present.Card(c))
 }
 
 func (h *CardHandler) update(w http.ResponseWriter, r *http.Request) {

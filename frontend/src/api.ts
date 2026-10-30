@@ -73,6 +73,24 @@ function refreshSession(): Promise<CurrentUser | null> {
   return refreshing;
 }
 
+/** A valid access token for the real-time socket (renewed if it is about to expire). */
+export async function getAccessToken(): Promise<string | null> {
+  if (!accessToken || Date.now() > accessExpiresAt - 30_000) await refreshSession();
+  return accessToken;
+}
+
+// The open board's real-time connection id. Sent with requests, so the board events they cause can be
+// told apart from changes made in other tabs or by other people.
+let realtimeConnId: string | null = null;
+
+export function setRealtimeConnId(id: string | null) {
+  realtimeConnId = id;
+}
+
+export function getRealtimeConnId() {
+  return realtimeConnId;
+}
+
 const isAuthPath = (path: string) => path.startsWith("/auth/");
 
 async function request<T>(method: string, path: string, body?: unknown, retry = true): Promise<T> {
@@ -82,6 +100,7 @@ async function request<T>(method: string, path: string, body?: unknown, retry = 
   const headers: Record<string, string> = {};
   if (body !== undefined && !(body instanceof FormData)) headers["Content-Type"] = "application/json";
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  if (realtimeConnId) headers["X-Realtime-Conn"] = realtimeConnId;
 
   let res: Response;
   try {

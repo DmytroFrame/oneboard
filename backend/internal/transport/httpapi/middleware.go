@@ -11,6 +11,7 @@ import (
 
 	"clodapp/backend/internal/config"
 	"clodapp/backend/internal/domain"
+	"clodapp/backend/internal/usecase"
 	"clodapp/backend/internal/usecase/auth"
 )
 
@@ -62,7 +63,12 @@ func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 			fail(w, r, err)
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, u)))
+		ctx := context.WithValue(r.Context(), ctxKey{}, u)
+		// The tab's real-time connection id (hex, see newConnID), echoed in the board events this request causes.
+		if origin := r.Header.Get("X-Realtime-Conn"); len(origin) <= 32 && isHex(origin) {
+			ctx = usecase.WithOrigin(ctx, origin)
+		}
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
@@ -101,4 +107,13 @@ func refreshTokenFrom(r *http.Request) string {
 		return c.Value
 	}
 	return ""
+}
+
+func isHex(s string) bool {
+	for _, c := range s {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return s != ""
 }

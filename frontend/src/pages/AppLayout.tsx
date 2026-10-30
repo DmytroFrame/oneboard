@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { NavLink, Outlet, useNavigate, useOutletContext } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Avatar } from "../components/Avatar";
 import { Logo } from "../components/Logo";
 import { CreateOrgModal, CreateProjectModal } from "../components/ProjectModals";
 import { can } from "../orgs";
+import { BoardSocket, type UserEvent } from "../realtime";
 import type { Organization, Project } from "../types";
 
 export interface LayoutContext {
@@ -16,6 +17,8 @@ export interface LayoutContext {
   reload: () => Promise<void>;
   openCreateProject: (orgId?: number) => void;
   openCreateOrg: () => void;
+  /** Bumped when an organization's member list changed elsewhere; pages showing it reload. */
+  orgMembersSignal: { orgId: number; n: number };
 }
 
 export function useLayout() {
@@ -33,6 +36,13 @@ export default function AppLayout() {
   const [error, setError] = useState("");
   const [creatingProject, setCreatingProject] = useState<{ orgId?: number } | null>(null);
   const [creatingOrg, setCreatingOrg] = useState(false);
+  const [notice, setNotice] = useState<{ text: string; tone: "info" | "warn" } | null>(null);
+  const [orgMembersSignal, setOrgMembersSignal] = useState({ orgId: 0, n: 0 });
+  const location = useLocation();
+  const pathRef = useRef(location.pathname);
+  pathRef.current = location.pathname;
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
 
   const reload = useCallback(async () => {
     try {
@@ -49,12 +59,51 @@ export default function AppLayout() {
     reload();
   }, [reload]);
 
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 6000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  // The user's own real-time channel: access granted or taken away anywhere in the app.
+  useEffect(() => {
+    const socket = new BoardSocket(0);
+    const off = socket.on("user", (m) => {
+      const e = m.event as UserEvent;
+      if (e.type === "org.members") {
+        setOrgMembersSignal((s) => ({ orgId: e.orgId, n: s.n + 1 }));
+        void reload(); // member counts
+        return;
+      }
+      void reload();
+      const self = e.actorId === user!.id;
+      const name = e.name;
+      if (e.reason === "added" && !self) setNotice({ text: t("live.addedTo", { name }), tone: "info" });
+      if (e.reason === "role" && !self) setNotice({ text: t("live.roleChanged", { name }), tone: "info" });
+      if (e.reason === "removed" || e.reason === "deleted") {
+        // Leave a page we can no longer see.
+        const path = pathRef.current;
+        const onIt = e.projectId
+          ? path === `/projects/${e.projectId}`
+          : path === `/orgs/${e.orgId}` || !!projectsRef.current?.some((p) => p.organizationId === e.orgId && path === `/projects/${p.id}`);
+        if (!self) setNotice({ text: t(e.reason === "deleted" ? "live.deleted" : "live.removedFrom", { name }), tone: "warn" });
+        if (onIt) navigate("/home", { replace: true });
+      }
+    });
+    return () => {
+      off();
+      socket.close();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reload]);
+
   const ctx: LayoutContext = {
     projects: projects ?? [],
     orgs,
     reload,
     openCreateProject: (orgId) => setCreatingProject({ orgId }),
     openCreateOrg: () => setCreatingOrg(true),
+    orgMembersSignal,
   };
 
   return (
@@ -124,6 +173,11 @@ export default function AppLayout() {
           </NavLink>
         </aside>
 
+        {notice && (
+          <div className={`toast toast--${notice.tone}`} role="status" onClick={() => setNotice(null)}>
+            {notice.text}
+          </div>
+        )}
         <main className="app-main">
           {error && (
             <div className="banner-error">

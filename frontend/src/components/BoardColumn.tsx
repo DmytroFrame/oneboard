@@ -26,6 +26,7 @@ interface Props {
   allColumns: Column[];
   isOwner: boolean;
   draggingId: number | null;
+  remoteDragIds: Set<number>; // cards someone else is dragging right now
   dropBeforeId: number | null | undefined; // undefined = this column isn't the drop target
   membersById: Map<number, User>;
   onDragOver: (e: DragEvent<HTMLElement>) => void;
@@ -82,7 +83,12 @@ export function BoardColumn(props: Props) {
   }
 
   return (
-    <section className={`column${dropBeforeId !== undefined ? " column--over" : ""}`} onDragOver={props.onDragOver} onDrop={props.onDrop}>
+    <section
+      className={`column${dropBeforeId !== undefined ? " column--over" : ""}`}
+      data-column-id={state.column.id}
+      onDragOver={props.onDragOver}
+      onDrop={props.onDrop}
+    >
       <div className="column-head">
         {renaming ? (
           <form onSubmit={submitRename} className="column-rename">
@@ -161,7 +167,7 @@ export function BoardColumn(props: Props) {
             {dropBeforeId === card.id && <div className="drop-indicator" />}
             <article
               data-card-id={card.id}
-              className={`card${draggingId === card.id ? " card--dragging" : ""}`}
+              className={`card${draggingId === card.id ? " card--dragging" : ""}${props.remoteDragIds.has(card.id) ? " card--remote-drag" : ""}`}
               draggable
               onDragStart={(e) => props.onCardDragStart(e, card)}
               onDragEnd={props.onCardDragEnd}

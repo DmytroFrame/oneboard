@@ -28,6 +28,7 @@ type CardService struct {
 	index   SearchIndex
 	files   AttachmentFiles
 	storage FileStorage
+	events  usecase.BoardEvents
 	tx      usecase.Transactor
 	log     *slog.Logger
 }
@@ -40,12 +41,13 @@ type CardDeps struct {
 	Index   SearchIndex
 	Files   AttachmentFiles
 	Storage FileStorage
+	Events  usecase.BoardEvents
 	Tx      usecase.Transactor
 	Log     *slog.Logger
 }
 
 func NewCardService(d CardDeps) *CardService {
-	return &CardService{cards: d.Cards, columns: d.Columns, members: d.Members, index: d.Index, files: d.Files, storage: d.Storage, tx: d.Tx, log: d.Log}
+	return &CardService{cards: d.Cards, columns: d.Columns, members: d.Members, index: d.Index, files: d.Files, storage: d.Storage, events: d.Events, tx: d.Tx, log: d.Log}
 }
 
 type ListQuery struct {
@@ -138,7 +140,11 @@ func (s *CardService) Create(ctx context.Context, userID, projectID, columnID in
 		return domain.Card{}, err
 	}
 	s.reindex(ctx, id)
-	return s.cards.Get(ctx, id)
+	created, err := s.cards.Get(ctx, id)
+	if err == nil {
+		s.events.Publish(ctx, domain.BoardEvent{Type: domain.EventCardCreated, ProjectID: projectID, ActorID: userID, Card: &created})
+	}
+	return created, err
 }
 
 // accessibleCard loads a card and the user's role in its project.
@@ -166,7 +172,22 @@ func (s *CardService) Update(ctx context.Context, userID, cardID int64, d domain
 		return c, err
 	}
 	s.reindex(ctx, c.ID)
-	return s.cards.Get(ctx, c.ID)
+	return s.publishCard(ctx, userID, c.ID)
+}
+
+// publishCard reloads a card and tells the board it changed.
+func (s *CardService) publishCard(ctx context.Context, userID, cardID int64) (domain.Card, error) {
+	c, err := s.cards.Get(ctx, cardID)
+	if err == nil {
+		s.events.Publish(ctx, domain.BoardEvent{Type: domain.EventCardUpdated, ProjectID: c.ProjectID, ActorID: userID, Card: &c})
+	}
+	return c, err
+}
+
+// Get returns a single card the user can access (for clients refreshing one card).
+func (s *CardService) Get(ctx context.Context, userID, cardID int64) (domain.Card, error) {
+	c, _, err := s.accessibleCard(ctx, userID, cardID)
+	return c, err
 }
 
 // Placement says where a moved card goes. A paginated client may drop below the last
@@ -185,6 +206,7 @@ func (s *CardService) Move(ctx context.Context, userID, cardID, columnID int64, 
 		return c, err
 	}
 
+	var order []int64
 	err = s.tx.WithinTx(ctx, func(ctx context.Context) error {
 		if err := s.columns.Lock(ctx, columnID); err != nil {
 			return err
@@ -193,12 +215,30 @@ func (s *CardService) Move(ctx context.Context, userID, cardID, columnID int64, 
 		if err != nil {
 			return err
 		}
-		return s.cards.Place(ctx, c.ID, columnID, insertInOrder(current, c.ID, p))
+		order = insertInOrder(current, c.ID, p)
+		return s.cards.Place(ctx, c.ID, columnID, order)
 	})
 	if err != nil {
 		return c, err
 	}
-	return s.cards.Get(ctx, c.ID)
+	moved, err := s.cards.Get(ctx, c.ID)
+	if err != nil {
+		return moved, err
+	}
+	// Tell viewers the card's new neighbours, so they can place it among the cards they have loaded.
+	ev := domain.BoardEvent{Type: domain.EventCardMoved, ProjectID: c.ProjectID, ActorID: userID, Card: &moved, FromColumnID: c.ColumnID}
+	for i, id := range order {
+		if id == c.ID {
+			if i > 0 {
+				ev.AfterID = &order[i-1]
+			}
+			if i+1 < len(order) {
+				ev.BeforeID = &order[i+1]
+			}
+		}
+	}
+	s.events.Publish(ctx, ev)
+	return moved, nil
 }
 
 // insertInOrder returns order without cardID, with cardID re-inserted according to p.
@@ -246,6 +286,7 @@ func (s *CardService) Delete(ctx context.Context, userID, cardID int64) error {
 	if err := s.storage.DeleteMany(ctx, keys); err != nil {
 		s.log.Error("storage: delete card files", "card", c.ID, "err", err)
 	}
+	s.events.Publish(ctx, domain.BoardEvent{Type: domain.EventCardDeleted, ProjectID: c.ProjectID, ActorID: userID, CardID: c.ID, ColumnID: c.ColumnID})
 	return nil
 }
 
