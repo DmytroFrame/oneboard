@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"time"
 
-	"clodapp/backend/internal/config"
-	"clodapp/backend/internal/domain"
-	"clodapp/backend/internal/usecase/dashboard"
+	"github.com/DmytroFrame/oneboard/backend/internal/config"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/dashboard"
 )
 
 // Presenter turns domain objects into DTOs and signs the URLs inside them. <img> and <video> can't send
@@ -24,7 +24,7 @@ type Presenter struct {
 func NewPresenter(cfg config.Config) *Presenter {
 	// A key derived for this one purpose, so a URL signature can never double as anything else.
 	mac := hmac.New(sha256.New, cfg.JWTSecret)
-	mac.Write([]byte("flowboard/signed-urls"))
+	mac.Write([]byte("oneboard/signed-urls"))
 	return &Presenter{key: mac.Sum(nil), now: time.Now}
 }
 

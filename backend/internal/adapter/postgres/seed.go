@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"clodapp/backend/internal/domain"
-	"clodapp/backend/internal/usecase/auth"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/auth"
 )
 
 // Seeder fills an empty database with demo users, projects and cards so the app isn't blank on first run.
@@ -61,7 +61,7 @@ func (s *Seeder) seed(ctx context.Context) error {
 		name    string
 		members map[int]domain.OrgRole // index into uid → role
 	}{
-		{"Flowboard Inc.", map[int]domain.OrgRole{0: domain.OrgRoleOwner, 1: domain.OrgRoleAdmin, 2: domain.OrgRoleMember, 3: domain.OrgRoleMember}},
+		{"OneBoard Inc.", map[int]domain.OrgRole{0: domain.OrgRoleOwner, 1: domain.OrgRoleAdmin, 2: domain.OrgRoleMember, 3: domain.OrgRoleMember}},
 		{"Mobile Studio", map[int]domain.OrgRole{1: domain.OrgRoleOwner, 0: domain.OrgRoleAdmin}},
 	}
 	orgID := make([]int64, len(orgs))
@@ -92,7 +92,7 @@ func (s *Seeder) seed(ctx context.Context) error {
 		cards     []card
 		backlog   int // extra generated cards in the first column, to demo infinite scroll
 	}{
-		{0, "Flowboard", "KAN", []int{1, 2, 3}, []card{
+		{0, "OneBoard", "KAN", []int{1, 2, 3}, []card{
 			{"Set up CI/CD", "GitHub Actions: lint, tests, Docker image build.", "high", 0, 0, 2},
 			{"Profile page design", "Figma mockups for desktop and mobile.", "medium", 0, 1, 3},
 			{"Add task search", "Full-text search with OpenSearch.", "low", 0, 2, -1},

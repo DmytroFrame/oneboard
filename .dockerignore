@@ -1,0 +1,10 @@
+.git
+.env
+.env.*
+!.env.aws.example
+**/node_modules
+frontend/dist
+backend/bin
+backend/kanban.db*
+*.md
+!README.md

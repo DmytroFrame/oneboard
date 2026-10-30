@@ -1,4 +1,4 @@
-.PHONY: dev-backend dev-frontend build run infra-up infra-down infra-logs
+.PHONY: dev-backend dev-frontend build run test infra-up infra-down infra-logs docker-build
 
 # Dev: `make infra-up` first, then run both in separate terminals, open http://localhost:5173
 dev-backend:
@@ -14,6 +14,14 @@ build:
 
 run: build
 	cd backend && ./bin/server
+
+test:
+	cd backend && go vet ./... && go test ./...
+	cd frontend && npm run build
+
+# Production image (API + SPA) for AWS, see docs/aws.md
+docker-build:
+	docker build -t oneboard .
 
 # Local infrastructure: Postgres, Redis, OpenSearch, RustFS, Redpanda (credentials: credentials.md)
 infra-up:

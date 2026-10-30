@@ -3,7 +3,7 @@
 // English simply never picks "few" or "many".
 export const en = {
   meta: {
-    title: "Flowboard — Kanban for teams",
+    title: "OneBoard — Kanban for teams",
   },
   common: {
     cancel: "Cancel",
@@ -48,7 +48,7 @@ export const en = {
     getStarted: "Get started free",
     titleStart: "Plan your team's work",
     titleAccent: "without the chaos",
-    lead: "Flowboard is a lightweight kanban board for small teams. Tasks, assignees and progress in one place, with no setup overhead.",
+    lead: "OneBoard is a lightweight kanban board for small teams. Tasks, assignees and progress in one place, with no setup overhead.",
     goToBoard: "Go to board",
     createAccount: "Create account",
     demo: "Demo: demo@example.com",
@@ -159,7 +159,7 @@ export const en = {
     addPeople: "Add people",
     searchPeople: "Search by name or email",
     noCandidates: "No users to add",
-    mustRegister: "A person has to sign up for Flowboard first.",
+    mustRegister: "A person has to sign up for OneBoard first.",
     deleteTitle: "Delete project",
     deleteText: "All tasks in the project will be deleted permanently.",
     leaveTitle: "Leave project",
@@ -171,7 +171,7 @@ export const en = {
   },
   settings: {
     title: "Settings",
-    subtitle: "Your profile and how Flowboard looks. Saved to your account and applied on every device.",
+    subtitle: "Your profile and how OneBoard looks. Saved to your account and applied on every device.",
     profile: "Profile",
     uploadPhoto: "Upload photo",
     changePhoto: "Change photo",

@@ -11,15 +11,17 @@ import (
 	"strings"
 	"time"
 
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/opensearch-project/opensearch-go/v4"
 	"github.com/opensearch-project/opensearch-go/v4/opensearchapi"
+	"github.com/opensearch-project/opensearch-go/v4/signer/awsv2"
 	"go.uber.org/fx"
 
-	"clodapp/backend/internal/config"
-	"clodapp/backend/internal/domain"
-	"clodapp/backend/internal/usecase/board"
-	"clodapp/backend/internal/usecase/organization"
-	"clodapp/backend/internal/usecase/project"
+	"github.com/DmytroFrame/oneboard/backend/internal/config"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/board"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/organization"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/project"
 )
 
 var Module = fx.Module("opensearch",
@@ -32,11 +34,11 @@ var Module = fx.Module("opensearch",
 )
 
 // Words are indexed as edge n-grams so that typing the beginning of any word matches
-// ("лог" finds "логіном"); the query side uses the plain standard analyzer.
+// ("lo" finds "login"); the query side uses the plain standard analyzer.
 const indexSettings = `{
   "settings": {
     "number_of_shards": 1,
-    "number_of_replicas": 0,
+    "number_of_replicas": %d,
     "analysis": {
       "filter": { "prefix": { "type": "edge_ngram", "min_gram": 1, "max_gram": 20 } },
       "analyzer": { "prefix": { "tokenizer": "standard", "filter": ["lowercase", "prefix"] } }
@@ -55,8 +57,9 @@ const indexSettings = `{
 const bulkChunk = 500
 
 type CardIndex struct {
-	client *opensearchapi.Client
-	index  string
+	client   *opensearchapi.Client
+	index    string
+	replicas int // 0 locally; at least 1 on a multi-AZ AWS domain
 }
 
 type doc struct {
@@ -66,19 +69,34 @@ type doc struct {
 	Description string `json:"description"`
 }
 
+// NewCardIndex authenticates with a user/password (local cluster, or an Amazon OpenSearch domain with
+// a master user) or signs every request with SigV4 using the default AWS credential chain.
 func NewCardIndex(cfg config.Config) (*CardIndex, error) {
-	client, err := opensearchapi.NewClient(opensearchapi.Config{
-		Client: opensearch.Config{
-			Addresses:          []string{cfg.OpenSearchURL},
-			Username:           cfg.OpenSearchUser,
-			Password:           cfg.OpenSearchPassword,
-			InsecureSkipVerify: cfg.OpenSearchInsecure,
-		},
-	})
+	osCfg := opensearch.Config{
+		Addresses:          []string{cfg.OpenSearchURL},
+		InsecureSkipVerify: cfg.OpenSearchInsecure,
+	}
+	switch cfg.OpenSearchAuth {
+	case "basic":
+		osCfg.Username, osCfg.Password = cfg.OpenSearchUser, cfg.OpenSearchPassword
+	case "aws":
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		awsCfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(cfg.AWSRegion))
+		if err != nil {
+			return nil, fmt.Errorf("opensearch: aws credentials: %w", err)
+		}
+		signer, err := awsv2.NewSignerWithService(awsCfg, cfg.OpenSearchService)
+		if err != nil {
+			return nil, fmt.Errorf("opensearch: signer: %w", err)
+		}
+		osCfg.Signer = signer
+	}
+	client, err := opensearchapi.NewClient(opensearchapi.Config{Client: osCfg})
 	if err != nil {
 		return nil, fmt.Errorf("opensearch: %w", err)
 	}
-	return &CardIndex{client: client, index: cfg.OpenSearchIndex}, nil
+	return &CardIndex{client: client, index: cfg.OpenSearchIndex, replicas: cfg.OpenSearchReplicas}, nil
 }
 
 func status(resp *opensearch.Response) int {
@@ -98,7 +116,7 @@ func (i *CardIndex) Ensure(ctx context.Context) error {
 		case http.StatusOK:
 			return nil
 		case http.StatusNotFound:
-			_, err := i.client.Indices.Create(ctx, opensearchapi.IndicesCreateReq{Index: i.index, Body: strings.NewReader(indexSettings)})
+			_, err := i.client.Indices.Create(ctx, opensearchapi.IndicesCreateReq{Index: i.index, Body: strings.NewReader(fmt.Sprintf(indexSettings, i.replicas))})
 			if err != nil {
 				return fmt.Errorf("opensearch: create index: %w", err)
 			}

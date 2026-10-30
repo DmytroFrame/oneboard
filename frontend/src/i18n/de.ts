@@ -2,7 +2,7 @@ import type { Translation } from "./en";
 
 export const de: Translation = {
   meta: {
-    title: "Flowboard — Kanban für Teams",
+    title: "OneBoard — Kanban für Teams",
   },
   common: {
     cancel: "Abbrechen",
@@ -47,7 +47,7 @@ export const de: Translation = {
     getStarted: "Kostenlos starten",
     titleStart: "Plane die Arbeit deines Teams",
     titleAccent: "ohne Chaos",
-    lead: "Flowboard ist ein schlankes Kanban-Board für kleine Teams. Aufgaben, Zuständige und Fortschritt an einem Ort – ganz ohne aufwendige Einrichtung.",
+    lead: "OneBoard ist ein schlankes Kanban-Board für kleine Teams. Aufgaben, Zuständige und Fortschritt an einem Ort – ganz ohne aufwendige Einrichtung.",
     goToBoard: "Zum Board",
     createAccount: "Konto erstellen",
     demo: "Demo: demo@example.com",
@@ -158,7 +158,7 @@ export const de: Translation = {
     addPeople: "Personen hinzufügen",
     searchPeople: "Nach Name oder E-Mail suchen",
     noCandidates: "Keine Nutzer zum Hinzufügen",
-    mustRegister: "Die Person muss sich zuerst bei Flowboard registrieren.",
+    mustRegister: "Die Person muss sich zuerst bei OneBoard registrieren.",
     deleteTitle: "Projekt löschen",
     deleteText: "Alle Aufgaben des Projekts werden endgültig gelöscht.",
     leaveTitle: "Projekt verlassen",
@@ -170,7 +170,7 @@ export const de: Translation = {
   },
   settings: {
     title: "Einstellungen",
-    subtitle: "Dein Profil und das Aussehen von Flowboard. Wird im Konto gespeichert und gilt auf allen Geräten.",
+    subtitle: "Dein Profil und das Aussehen von OneBoard. Wird im Konto gespeichert und gilt auf allen Geräten.",
     profile: "Profil",
     uploadPhoto: "Foto hochladen",
     changePhoto: "Foto ändern",

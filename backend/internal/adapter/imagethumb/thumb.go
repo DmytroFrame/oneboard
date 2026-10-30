@@ -17,7 +17,7 @@ import (
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
 
-	"clodapp/backend/internal/usecase/attachment"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/attachment"
 )
 
 var Module = fx.Module("thumbnails", fx.Provide(func() attachment.Thumbnailer { return Thumbnailer{} }))

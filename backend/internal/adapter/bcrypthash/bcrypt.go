@@ -5,7 +5,7 @@ import (
 	"go.uber.org/fx"
 	"golang.org/x/crypto/bcrypt"
 
-	"clodapp/backend/internal/usecase/auth"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/auth"
 )
 
 var Module = fx.Module("bcrypt", fx.Provide(func() auth.PasswordHasher { return Hasher{} }))

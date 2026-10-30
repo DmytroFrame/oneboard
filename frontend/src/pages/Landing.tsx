@@ -98,7 +98,7 @@ export default function Landing() {
         </Link>
       </section>
 
-      <footer className="landing-footer">© {new Date().getFullYear()} Flowboard</footer>
+      <footer className="landing-footer">© {new Date().getFullYear()} OneBoard</footer>
     </div>
   );
 }

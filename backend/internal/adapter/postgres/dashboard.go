@@ -5,7 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"clodapp/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
 )
 
 // DashboardRepo is a read model for the home page. Every figure only counts projects the user is in.

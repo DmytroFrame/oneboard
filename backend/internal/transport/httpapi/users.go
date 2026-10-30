@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"clodapp/backend/internal/domain"
-	"clodapp/backend/internal/usecase/user"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/user"
 )
 
 type UserHandler struct {

@@ -10,23 +10,23 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 
-	"clodapp/backend/internal/adapter/bcrypthash"
-	"clodapp/backend/internal/adapter/imagethumb"
-	"clodapp/backend/internal/adapter/jwttoken"
-	"clodapp/backend/internal/adapter/postgres"
-	"clodapp/backend/internal/adapter/redisstore"
-	"clodapp/backend/internal/adapter/s3store"
-	"clodapp/backend/internal/adapter/searchindex"
-	"clodapp/backend/internal/config"
-	"clodapp/backend/internal/transport/httpapi"
-	"clodapp/backend/internal/usecase/attachment"
-	"clodapp/backend/internal/usecase/auth"
-	"clodapp/backend/internal/usecase/board"
-	"clodapp/backend/internal/usecase/collab"
-	"clodapp/backend/internal/usecase/dashboard"
-	"clodapp/backend/internal/usecase/organization"
-	"clodapp/backend/internal/usecase/project"
-	"clodapp/backend/internal/usecase/user"
+	"github.com/DmytroFrame/oneboard/backend/internal/adapter/bcrypthash"
+	"github.com/DmytroFrame/oneboard/backend/internal/adapter/imagethumb"
+	"github.com/DmytroFrame/oneboard/backend/internal/adapter/jwttoken"
+	"github.com/DmytroFrame/oneboard/backend/internal/adapter/postgres"
+	"github.com/DmytroFrame/oneboard/backend/internal/adapter/redisstore"
+	"github.com/DmytroFrame/oneboard/backend/internal/adapter/s3store"
+	"github.com/DmytroFrame/oneboard/backend/internal/adapter/searchindex"
+	"github.com/DmytroFrame/oneboard/backend/internal/config"
+	"github.com/DmytroFrame/oneboard/backend/internal/transport/httpapi"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/attachment"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/auth"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/board"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/collab"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/dashboard"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/organization"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/project"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/user"
 )
 
 func New() *fx.App {
@@ -67,8 +67,13 @@ func New() *fx.App {
 	)
 }
 
-func newLogger() *slog.Logger {
-	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+func newLogger(cfg config.Config) *slog.Logger {
+	opts := &slog.HandlerOptions{Level: slog.LevelInfo}
+	var handler slog.Handler = slog.NewTextHandler(os.Stderr, opts)
+	if cfg.LogFormat == "json" { // one JSON object per line: what CloudWatch Logs Insights parses
+		handler = slog.NewJSONHandler(os.Stderr, opts)
+	}
+	log := slog.New(handler)
 	slog.SetDefault(log)
 	return log
 }

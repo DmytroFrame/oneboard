@@ -7,12 +7,12 @@
     <script>
       // Apply the theme before first paint to avoid a light flash in dark mode.
       try {
-        var t = localStorage.getItem("flowboard:theme");
+        var t = localStorage.getItem("oneboard:theme");
         if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
         document.documentElement.dataset.theme = t;
       } catch (e) {}
     </script>
-    <title>Flowboard — Kanban for teams</title>
+    <title>OneBoard — Kanban for teams</title>
   </head>
   <body>
     <div id="root"></div>

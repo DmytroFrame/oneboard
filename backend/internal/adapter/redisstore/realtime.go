@@ -12,9 +12,9 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"clodapp/backend/internal/domain"
-	"clodapp/backend/internal/usecase"
-	"clodapp/backend/internal/usecase/collab"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/collab"
 )
 
 // ---------- pub/sub between server instances ----------
@@ -116,40 +116,61 @@ func (b *Bus) Subscribe(ctx context.Context) (<-chan collab.Message, error) {
 
 // ---------- presence ----------
 
-// Presence keeps "presence:<projectID>" hashes: connection id → peer JSON, each field with its own TTL
-// (HEXPIRE, Redis 7.4+), so peers of a crashed server instance disappear on their own.
+// Presence keeps, per board, a hash "presence:<projectID>" (connection id → peer JSON) and a sorted
+// set "presence:<projectID>:exp" (connection id → expiry). Peers of a crashed server instance stop
+// being refreshed and are swept out on the next read. Works on any Redis/Valkey version, including
+// ElastiCache (no per-field hash TTLs needed).
 type Presence struct{ rdb *redis.Client }
 
 func NewPresence(rdb *redis.Client) *Presence { return &Presence{rdb: rdb} }
 
-func presenceKey(projectID int64) string { return fmt.Sprintf("presence:%d", projectID) }
+func presenceKeys(projectID int64) []string {
+	k := fmt.Sprintf("presence:%d", projectID)
+	return []string{k, k + ":exp"}
+}
+
+var presencePutScript = redis.NewScript(`
+redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])
+redis.call('ZADD', KEYS[2], ARGV[3], ARGV[1])
+redis.call('EXPIRE', KEYS[1], 86400)
+redis.call('EXPIRE', KEYS[2], 86400)
+return 1
+`)
+
+// presenceListScript drops expired peers, then returns the rest.
+var presenceListScript = redis.NewScript(`
+local expired = redis.call('ZRANGEBYSCORE', KEYS[2], '-inf', ARGV[1])
+for _, id in ipairs(expired) do redis.call('HDEL', KEYS[1], id) end
+redis.call('ZREMRANGEBYSCORE', KEYS[2], '-inf', ARGV[1])
+return redis.call('HVALS', KEYS[1])
+`)
 
 func (p *Presence) Put(ctx context.Context, projectID int64, peer domain.Peer, ttl time.Duration) error {
 	data, err := json.Marshal(peer)
 	if err != nil {
 		return err
 	}
-	key := presenceKey(projectID)
-	_, err = p.rdb.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
-		pipe.HSet(ctx, key, peer.ConnID, data)
-		pipe.HExpire(ctx, key, ttl, peer.ConnID)
-		pipe.Expire(ctx, key, 24*time.Hour) // the hash itself, in case it is ever left empty-but-present
+	expires := time.Now().Add(ttl).UnixMilli()
+	return presencePutScript.Run(ctx, p.rdb, presenceKeys(projectID), peer.ConnID, data, expires).Err()
+}
+
+func (p *Presence) Remove(ctx context.Context, projectID int64, connID string) error {
+	keys := presenceKeys(projectID)
+	_, err := p.rdb.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+		pipe.HDel(ctx, keys[0], connID)
+		pipe.ZRem(ctx, keys[1], connID)
 		return nil
 	})
 	return err
 }
 
-func (p *Presence) Remove(ctx context.Context, projectID int64, connID string) error {
-	return p.rdb.HDel(ctx, presenceKey(projectID), connID).Err()
-}
-
 func (p *Presence) List(ctx context.Context, projectID int64) ([]domain.Peer, error) {
-	m, err := p.rdb.HGetAll(ctx, presenceKey(projectID)).Result()
+	vals, err := presenceListScript.Run(ctx, p.rdb, presenceKeys(projectID), time.Now().UnixMilli()).StringSlice()
 	if err != nil {
 		return nil, err
 	}
-	peers := make([]domain.Peer, 0, len(m))
-	for _, v := range m {
+	peers := make([]domain.Peer, 0, len(vals))
+	for _, v := range vals {
 		var peer domain.Peer
 		if json.Unmarshal([]byte(v), &peer) == nil {
 			peers = append(peers, peer)

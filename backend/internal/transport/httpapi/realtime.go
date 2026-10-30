@@ -16,8 +16,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/fx"
 
-	"clodapp/backend/internal/domain"
-	"clodapp/backend/internal/usecase/collab"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/collab"
 )
 
 // The real-time protocol is JSON over a WebSocket at /api/ws, one connection per open board.

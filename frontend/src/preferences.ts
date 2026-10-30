@@ -6,8 +6,8 @@ import type { Settings, ThemePref } from "./types";
 
 // The last applied settings are mirrored to localStorage: index.html reads the theme before first paint,
 // and signed-out pages (landing, sign-in) keep the visitor's choice.
-const THEME_KEY = "flowboard:theme";
-const LANGUAGE_KEY = "flowboard:language";
+const THEME_KEY = "oneboard:theme";
+const LANGUAGE_KEY = "oneboard:language";
 const media = window.matchMedia("(prefers-color-scheme: dark)");
 
 function read(key: string) {

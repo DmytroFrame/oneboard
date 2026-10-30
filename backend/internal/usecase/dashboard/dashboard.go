@@ -6,7 +6,7 @@ import (
 
 	"go.uber.org/fx"
 
-	"clodapp/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
 )
 
 var Module = fx.Module("dashboard", fx.Provide(NewService))

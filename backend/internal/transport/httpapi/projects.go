@@ -5,7 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"clodapp/backend/internal/usecase/project"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/project"
 )
 
 type ProjectHandler struct {

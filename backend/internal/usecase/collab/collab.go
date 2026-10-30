@@ -10,8 +10,8 @@ import (
 
 	"go.uber.org/fx"
 
-	"clodapp/backend/internal/domain"
-	"clodapp/backend/internal/usecase"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase"
 )
 
 var Module = fx.Module("collab", fx.Provide(NewService))

@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"clodapp/backend/internal/domain"
-	"clodapp/backend/internal/usecase"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase"
 )
 
 var (

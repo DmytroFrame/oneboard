@@ -15,23 +15,26 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+	"github.com/pressly/goose/v3/lock"
 	"go.uber.org/fx"
 
-	"clodapp/backend/internal/config"
-	"clodapp/backend/internal/domain"
-	"clodapp/backend/internal/usecase"
-	"clodapp/backend/internal/usecase/attachment"
-	"clodapp/backend/internal/usecase/auth"
-	"clodapp/backend/internal/usecase/board"
-	"clodapp/backend/internal/usecase/collab"
-	"clodapp/backend/internal/usecase/dashboard"
-	"clodapp/backend/internal/usecase/organization"
-	"clodapp/backend/internal/usecase/project"
-	"clodapp/backend/internal/usecase/user"
+	"github.com/DmytroFrame/oneboard/backend/internal/config"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/health"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/attachment"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/auth"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/board"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/collab"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/dashboard"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/organization"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/project"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/user"
 )
 
 // Module provides the pool, the transactor and every repository bound to the ports that use it.
 var Module = fx.Module("postgres",
+	health.Provide(func(db *DB) health.Check { return health.Check{Name: "postgres", Run: db.pool.Ping} }),
 	fx.Provide(
 		NewDB,
 		NewUserRepo, NewProjectRepo, NewColumnRepo, NewCardRepo, NewSeeder,
@@ -114,7 +117,12 @@ func migrate(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	p, err := goose.NewProvider(goose.DialectPostgres, sqlDB, sub)
+	// Several app instances may start together (rolling deploy): only one applies migrations at a time.
+	locker, err := lock.NewPostgresSessionLocker()
+	if err != nil {
+		return err
+	}
+	p, err := goose.NewProvider(goose.DialectPostgres, sqlDB, sub, goose.WithSessionLocker(locker))
 	if err != nil {
 		return fmt.Errorf("migrations: %w", err)
 	}

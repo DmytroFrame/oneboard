@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"clodapp/backend/internal/domain"
-	"clodapp/backend/internal/usecase/attachment"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/attachment"
 )
 
 type AttachmentHandler struct {

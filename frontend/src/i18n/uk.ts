@@ -2,7 +2,7 @@ import type { Translation } from "./en";
 
 export const uk: Translation = {
   meta: {
-    title: "Flowboard — Kanban для команд",
+    title: "OneBoard — Kanban для команд",
   },
   common: {
     cancel: "Скасувати",
@@ -47,7 +47,7 @@ export const uk: Translation = {
     getStarted: "Почати безкоштовно",
     titleStart: "Плануйте роботу команди",
     titleAccent: "без хаосу",
-    lead: "Flowboard — легка kanban-дошка для невеликих команд. Задачі, виконавці та прогрес в одному місці, без зайвих налаштувань.",
+    lead: "OneBoard — легка kanban-дошка для невеликих команд. Задачі, виконавці та прогрес в одному місці, без зайвих налаштувань.",
     goToBoard: "Перейти до дошки",
     createAccount: "Створити акаунт",
     demo: "Демо: demo@example.com",
@@ -158,7 +158,7 @@ export const uk: Translation = {
     addPeople: "Додати людей",
     searchPeople: "Пошук за ім'ям або email",
     noCandidates: "Немає користувачів для додавання",
-    mustRegister: "Людина має спершу зареєструватися у Flowboard.",
+    mustRegister: "Людина має спершу зареєструватися у OneBoard.",
     deleteTitle: "Видалити проєкт",
     deleteText: "Усі задачі проєкту буде видалено назавжди.",
     leaveTitle: "Вийти з проєкту",
@@ -170,7 +170,7 @@ export const uk: Translation = {
   },
   settings: {
     title: "Налаштування",
-    subtitle: "Ваш профіль і вигляд Flowboard. Зберігається в акаунті й діє на всіх пристроях.",
+    subtitle: "Ваш профіль і вигляд OneBoard. Зберігається в акаунті й діє на всіх пристроях.",
     profile: "Профіль",
     uploadPhoto: "Завантажити фото",
     changePhoto: "Змінити фото",

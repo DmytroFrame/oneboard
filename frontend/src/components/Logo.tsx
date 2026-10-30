@@ -11,7 +11,7 @@ export function Logo() {
         <rect x="14" y="8" width="5" height="11" rx="1.5" fill="white" />
         <rect x="21" y="8" width="5" height="7" rx="1.5" fill="white" />
       </svg>
-      Flowboard
+      OneBoard
     </Link>
   );
 }

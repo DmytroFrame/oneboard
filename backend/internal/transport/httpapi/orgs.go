@@ -5,8 +5,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"clodapp/backend/internal/domain"
-	"clodapp/backend/internal/usecase/organization"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/organization"
 )
 
 type OrgHandler struct {

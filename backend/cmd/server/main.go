@@ -1,6 +1,6 @@
 package main
 
-import "clodapp/backend/internal/app"
+import "github.com/DmytroFrame/oneboard/backend/internal/app"
 
 func main() {
 	app.New().Run()

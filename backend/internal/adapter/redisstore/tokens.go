@@ -5,8 +5,10 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -14,14 +16,18 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 
-	"clodapp/backend/internal/config"
-	"clodapp/backend/internal/domain"
-	"clodapp/backend/internal/usecase"
-	"clodapp/backend/internal/usecase/auth"
-	"clodapp/backend/internal/usecase/collab"
+	"github.com/DmytroFrame/oneboard/backend/internal/config"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/health"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/auth"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/collab"
 )
 
 var Module = fx.Module("redis",
+	health.Provide(func(c *redis.Client) health.Check {
+		return health.Check{Name: "redis", Run: func(ctx context.Context) error { return c.Ping(ctx).Err() }}
+	}),
 	fx.Provide(
 		NewClient,
 		NewRefreshStore,
@@ -39,7 +45,12 @@ var Module = fx.Module("redis",
 )
 
 func NewClient(lc fx.Lifecycle, cfg config.Config) (*redis.Client, error) {
-	c := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr, Password: cfg.RedisPassword, DB: cfg.RedisDB})
+	opts := &redis.Options{Addr: cfg.RedisAddr, Username: cfg.RedisUsername, Password: cfg.RedisPassword, DB: cfg.RedisDB}
+	if cfg.RedisTLS { // ElastiCache with in-transit encryption
+		host, _, _ := net.SplitHostPort(cfg.RedisAddr)
+		opts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12, ServerName: host}
+	}
+	c := redis.NewClient(opts)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := c.Ping(ctx).Err(); err != nil {

@@ -3,7 +3,7 @@ package collab
 import (
 	"encoding/json"
 
-	"clodapp/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
 )
 
 // peerMessage is the subset of the wire protocol the service produces itself (join/leave/focus);

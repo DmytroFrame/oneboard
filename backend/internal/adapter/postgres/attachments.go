@@ -5,7 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"clodapp/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
 )
 
 type AttachmentRepo struct{ db *DB }

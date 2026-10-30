@@ -7,7 +7,7 @@ import (
 	"context"
 	"errors"
 
-	"clodapp/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
 )
 
 // Transactor runs fn in a single database transaction. Repositories called with the

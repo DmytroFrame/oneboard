@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"clodapp/backend/internal/config"
-	"clodapp/backend/internal/domain"
-	"clodapp/backend/internal/usecase/auth"
+	"github.com/DmytroFrame/oneboard/backend/internal/config"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/auth"
 )
 
 func newIssuer(secret string, now time.Time) *Issuer {

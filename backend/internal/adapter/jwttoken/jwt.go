@@ -11,9 +11,9 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"go.uber.org/fx"
 
-	"clodapp/backend/internal/config"
-	"clodapp/backend/internal/domain"
-	"clodapp/backend/internal/usecase/auth"
+	"github.com/DmytroFrame/oneboard/backend/internal/config"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/auth"
 )
 
 var Module = fx.Module("jwt",
@@ -24,8 +24,8 @@ var Module = fx.Module("jwt",
 )
 
 const (
-	issuer   = "flowboard"
-	audience = "flowboard-api"
+	issuer   = "oneboard"
+	audience = "oneboard-api"
 )
 
 type Issuer struct {

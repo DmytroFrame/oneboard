@@ -1,7 +1,7 @@
-# Локальна інфраструктура. Дані для входу беруться з .env (див. credentials.md).
-# Усі порти слухають лише 127.0.0.1.
+# Local infrastructure for OneBoard. Credentials come from .env (see credentials.md).
+# Every port listens on 127.0.0.1 only.
 
-name: flowboard
+name: oneboard
 
 services:
   postgres:
@@ -71,7 +71,7 @@ services:
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
     ports:
       - "127.0.0.1:9000:9000" # S3 API
-      - "127.0.0.1:9001:9001" # веб-консоль
+      - "127.0.0.1:9001:9001" # web console
     volumes:
       - rustfs-data:/data
     healthcheck:
@@ -81,7 +81,7 @@ services:
       retries: 30
       start_period: 10s
 
-  # Одноразово створює бакет через S3 API.
+  # Creates the bucket once, through the S3 API.
   rustfs-init:
     image: amazon/aws-cli:2.39.2
     depends_on:
@@ -113,7 +113,7 @@ services:
       - --schema-registry-addr=internal://0.0.0.0:8081,external://0.0.0.0:18081
       - --rpc-addr=redpanda:33145
       - --advertise-rpc-addr=redpanda:33145
-    # Kafka API вимагає SASL; суперкористувач створюється з RP_BOOTSTRAP_USER при першому старті кластера.
+    # The Kafka API requires SASL; the superuser is created from RP_BOOTSTRAP_USER when the cluster first starts.
     configs:
       - source: redpanda-bootstrap
         target: /etc/redpanda/.bootstrap.yaml

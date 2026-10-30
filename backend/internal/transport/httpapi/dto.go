@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"clodapp/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
 )
 
 // DTOs keep the JSON contract in the transport layer; domain entities carry no tags.

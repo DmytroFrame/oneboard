@@ -9,10 +9,10 @@ import (
 
 	"github.com/go-chi/chi/v5/middleware"
 
-	"clodapp/backend/internal/config"
-	"clodapp/backend/internal/domain"
-	"clodapp/backend/internal/usecase"
-	"clodapp/backend/internal/usecase/auth"
+	"github.com/DmytroFrame/oneboard/backend/internal/config"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/auth"
 )
 
 // The refresh token cookie is scoped to /api/auth, so it is only ever sent to refresh and logout.

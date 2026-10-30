@@ -7,8 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"clodapp/backend/internal/domain"
-	"clodapp/backend/internal/usecase/board"
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/board"
 )
 
 type CardRepo struct{ db *DB }
