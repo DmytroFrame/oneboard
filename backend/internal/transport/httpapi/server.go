@@ -50,10 +50,10 @@ func NewRouter(cfg config.Config, mw *Middleware, routes []Routes) http.Handler 
 			rt.Mount(public, private)
 		}
 		api.NotFound(func(w http.ResponseWriter, r *http.Request) {
-			writeError(w, http.StatusNotFound, "not found")
+			writeError(w, http.StatusNotFound, "not_found", "Not found")
 		})
 		api.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
-			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed")
 		})
 	})
 	r.Handle("/*", spaHandler(cfg.StaticDir))

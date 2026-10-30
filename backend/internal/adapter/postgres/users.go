@@ -13,19 +13,20 @@ type UserRepo struct{ db *DB }
 
 func NewUserRepo(db *DB) *UserRepo { return &UserRepo{db: db} }
 
-const userColumns = `id, name, email, color, password_hash, COALESCE(avatar_key, ''), avatar_updated_at, created_at`
+const userColumns = `id, name, email, color, password_hash, COALESCE(avatar_key, ''), avatar_updated_at, language, theme, created_at`
 
 func scanUser(row pgx.Row) (domain.User, error) {
 	var u domain.User
-	err := row.Scan(&u.ID, &u.Name, &u.Email, &u.Color, &u.PasswordHash, &u.AvatarKey, &u.AvatarUpdatedAt, &u.CreatedAt)
+	err := row.Scan(&u.ID, &u.Name, &u.Email, &u.Color, &u.PasswordHash, &u.AvatarKey, &u.AvatarUpdatedAt,
+		&u.Settings.Language, &u.Settings.Theme, &u.CreatedAt)
 	return u, mapErr(err)
 }
 
 func (r *UserRepo) Create(ctx context.Context, u *domain.User) error {
 	row := r.db.q(ctx).QueryRow(ctx,
-		`INSERT INTO users (name, email, password_hash, color) VALUES ($1, $2, $3, $4) RETURNING id, created_at`,
+		`INSERT INTO users (name, email, password_hash, color) VALUES ($1, $2, $3, $4) RETURNING id, language, theme, created_at`,
 		u.Name, u.Email, u.PasswordHash, u.Color)
-	return mapErr(row.Scan(&u.ID, &u.CreatedAt))
+	return mapErr(row.Scan(&u.ID, &u.Settings.Language, &u.Settings.Theme, &u.CreatedAt))
 }
 
 func (r *UserRepo) ByEmail(ctx context.Context, email string) (domain.User, error) {
@@ -59,4 +60,8 @@ func (r *UserRepo) SetAvatar(ctx context.Context, userID int64, key string, at t
 		WHERE u.id = prev.id
 		RETURNING prev.old_key`, userID, key, at).Scan(&old)
 	return old, mapErr(err)
+}
+
+func (r *UserRepo) SetSettings(ctx context.Context, userID int64, s domain.Settings) error {
+	return exec(ctx, r.db, `UPDATE users SET language = $2, theme = $3 WHERE id = $1`, userID, s.Language, s.Theme)
 }

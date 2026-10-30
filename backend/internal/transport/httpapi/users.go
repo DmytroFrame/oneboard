@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"clodapp/backend/internal/domain"
 	"clodapp/backend/internal/usecase/user"
 )
 
@@ -21,6 +22,7 @@ func NewUserHandler(users *user.Service) *UserHandler {
 
 func (h *UserHandler) Mount(_, private chi.Router) {
 	private.Get("/users", h.list)
+	private.Put("/users/me/settings", h.updateSettings)
 	private.Put("/users/me/avatar", h.uploadAvatar)
 	private.Delete("/users/me/avatar", h.removeAvatar)
 	private.Get("/users/{id}/avatar", h.avatar)
@@ -43,10 +45,10 @@ func (h *UserHandler) uploadAvatar(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var tooBig *http.MaxBytesError
 		if errors.As(err, &tooBig) {
-			writeError(w, http.StatusRequestEntityTooLarge, "аватарка має бути до 5 МБ")
+			fail(w, r, domain.ErrAvatarTooLarge)
 			return
 		}
-		writeError(w, http.StatusBadRequest, "надішліть зображення в полі avatar")
+		fail(w, r, domain.ErrAvatarMissing)
 		return
 	}
 	defer file.Close()
@@ -56,7 +58,7 @@ func (h *UserHandler) uploadAvatar(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toUser(u))
+	writeJSON(w, http.StatusOK, toMe(u))
 }
 
 func (h *UserHandler) removeAvatar(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +67,20 @@ func (h *UserHandler) removeAvatar(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toUser(u))
+	writeJSON(w, http.StatusOK, toMe(u))
+}
+
+func (h *UserHandler) updateSettings(w http.ResponseWriter, r *http.Request) {
+	var in settingsDTO
+	if !decode(w, r, &in) {
+		return
+	}
+	u, err := h.users.UpdateSettings(r.Context(), currentUser(r).ID, domain.Settings{Language: in.Language, Theme: in.Theme})
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toMe(u))
 }
 
 // avatar streams the image from object storage. URLs carry ?v=<version>, so it is cached for good.

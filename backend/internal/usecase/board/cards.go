@@ -16,8 +16,9 @@ const (
 	// maxSearchHits caps how many matches full-text search feeds into the database filter.
 	maxSearchHits = 10000
 
-	cardNotFound = "картку не знайдено"
 )
+
+var cardNotFound = domain.ErrCardNotFound
 
 type CardService struct {
 	cards   Cards
@@ -46,7 +47,7 @@ func (s *CardService) List(ctx context.Context, userID, projectID int64, q ListQ
 	if _, err := usecase.RequireMember(ctx, s.members, projectID, userID, projectNotFound); err != nil {
 		return domain.CardPage{}, err
 	}
-	if err := s.columnInProject(ctx, q.ColumnID, projectID, domain.NotFound(columnNotFound)); err != nil {
+	if err := s.columnInProject(ctx, q.ColumnID, projectID, columnNotFound); err != nil {
 		return domain.CardPage{}, err
 	}
 
@@ -90,7 +91,7 @@ func (s *CardService) checkAssignee(ctx context.Context, projectID int64, assign
 		return err
 	}
 	if role == domain.RoleNone {
-		return domain.Validation("виконавець має бути учасником проєкту")
+		return domain.ErrAssigneeNotMember
 	}
 	return nil
 }
@@ -102,7 +103,7 @@ func (s *CardService) Create(ctx context.Context, userID, projectID, columnID in
 	if err := d.Normalize(); err != nil {
 		return domain.Card{}, err
 	}
-	if err := s.columnInProject(ctx, columnID, projectID, domain.Validation("некоректна колонка")); err != nil {
+	if err := s.columnInProject(ctx, columnID, projectID, domain.ErrColumnInvalid); err != nil {
 		return domain.Card{}, err
 	}
 	if err := s.checkAssignee(ctx, projectID, d.AssigneeID); err != nil {
@@ -165,7 +166,7 @@ func (s *CardService) Move(ctx context.Context, userID, cardID, columnID int64, 
 	if err != nil {
 		return c, err
 	}
-	if err := s.columnInProject(ctx, columnID, c.ProjectID, domain.Validation("некоректна колонка")); err != nil {
+	if err := s.columnInProject(ctx, columnID, c.ProjectID, domain.ErrColumnInvalid); err != nil {
 		return c, err
 	}
 
@@ -215,7 +216,7 @@ func (s *CardService) Delete(ctx context.Context, userID, cardID int64) error {
 		return err
 	}
 	if c.AuthorID != userID && role != domain.RoleOwner {
-		return domain.Forbidden("видаляти картку може її автор або власник проєкту")
+		return domain.ErrCardDeleteDenied
 	}
 	if err := s.cards.Delete(ctx, c.ID); err != nil {
 		return err

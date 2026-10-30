@@ -18,7 +18,7 @@ var Module = fx.Module("project", fx.Provide(NewService))
 
 var keyRe = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
 
-const notFound = "проєкт не знайдено"
+var notFound = domain.ErrProjectNotFound
 
 type Projects interface {
 	ListForUser(ctx context.Context, userID int64) ([]domain.Project, error)
@@ -85,7 +85,7 @@ func (s *Service) List(ctx context.Context, userID int64) ([]domain.Project, err
 func validName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || len(name) > 100 {
-		return "", domain.Validation("вкажіть назву проєкту (до 100 символів)")
+		return "", domain.ErrProjectName
 	}
 	return name, nil
 }
@@ -98,7 +98,7 @@ func (s *Service) Create(ctx context.Context, userID int64, name, key string) (d
 	}
 	key = strings.ToUpper(strings.TrimSpace(key))
 	if !keyRe.MatchString(key) {
-		return domain.Project{}, domain.Validation("ключ: 2–10 латинських літер/цифр, починається з літери")
+		return domain.Project{}, domain.ErrProjectKey
 	}
 
 	var id int64
@@ -112,7 +112,7 @@ func (s *Service) Create(ctx context.Context, userID int64, name, key string) (d
 		return s.columns.CreateMany(ctx, id, domain.DefaultColumns)
 	})
 	if errors.Is(err, domain.ErrDuplicate) {
-		return domain.Project{}, domain.Conflict("проєкт з таким ключем вже існує")
+		return domain.Project{}, domain.ErrProjectKeyTaken
 	}
 	if err != nil {
 		return domain.Project{}, err
@@ -121,7 +121,7 @@ func (s *Service) Create(ctx context.Context, userID int64, name, key string) (d
 }
 
 func (s *Service) Rename(ctx context.Context, userID, projectID int64, name string) (domain.Project, error) {
-	if err := usecase.RequireOwner(ctx, s.members, projectID, userID, notFound, "змінювати проєкт може лише власник"); err != nil {
+	if err := usecase.RequireOwner(ctx, s.members, projectID, userID, notFound); err != nil {
 		return domain.Project{}, err
 	}
 	name, err := validName(name)
@@ -135,7 +135,7 @@ func (s *Service) Rename(ctx context.Context, userID, projectID int64, name stri
 }
 
 func (s *Service) Delete(ctx context.Context, userID, projectID int64) error {
-	if err := usecase.RequireOwner(ctx, s.members, projectID, userID, notFound, "видалити проєкт може лише власник"); err != nil {
+	if err := usecase.RequireOwner(ctx, s.members, projectID, userID, notFound); err != nil {
 		return err
 	}
 	if err := s.projects.Delete(ctx, projectID); err != nil {
@@ -155,18 +155,18 @@ func (s *Service) Members(ctx context.Context, userID, projectID int64) ([]domai
 }
 
 func (s *Service) AddMember(ctx context.Context, userID, projectID, targetID int64) ([]domain.Member, error) {
-	if err := usecase.RequireOwner(ctx, s.members, projectID, userID, notFound, "додавати учасників може лише власник проєкту"); err != nil {
+	if err := usecase.RequireOwner(ctx, s.members, projectID, userID, notFound); err != nil {
 		return nil, err
 	}
 	if _, err := s.users.ByID(ctx, targetID); err != nil {
 		if errors.Is(err, domain.ErrNoRows) {
-			return nil, domain.Validation("користувача не знайдено")
+			return nil, domain.ErrUnknownUser
 		}
 		return nil, err
 	}
 	if err := s.members.Add(ctx, projectID, targetID, domain.RoleMember); err != nil {
 		if errors.Is(err, domain.ErrDuplicate) {
-			return nil, domain.Conflict("користувач вже в проєкті")
+			return nil, domain.ErrAlreadyMember
 		}
 		return nil, err
 	}
@@ -186,11 +186,11 @@ func (s *Service) RemoveMember(ctx context.Context, userID, projectID, targetID 
 	}
 	switch {
 	case targetRole == domain.RoleNone:
-		return domain.NotFound("користувач не є учасником проєкту")
+		return domain.ErrNotMember
 	case targetRole == domain.RoleOwner:
-		return domain.Validation("власника не можна видалити з проєкту")
+		return domain.ErrCannotRemoveOwner
 	case role != domain.RoleOwner && targetID != userID:
-		return domain.Forbidden("видаляти учасників може лише власник проєкту")
+		return domain.ErrOwnerOnly
 	}
 	return s.tx.WithinTx(ctx, func(ctx context.Context) error {
 		if err := s.members.Remove(ctx, projectID, targetID); err != nil {

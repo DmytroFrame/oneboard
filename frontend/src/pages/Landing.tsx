@@ -1,32 +1,25 @@
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth";
+import { LanguageSelect } from "../components/LanguageSelect";
 import { Logo } from "../components/Logo";
 import { ThemeToggle } from "../theme";
 
 const features = [
-  {
-    icon: "▤",
-    title: "Kanban-дошка",
-    text: "Окрема дошка для кожного проєкту: чотири колонки від ідеї до релізу. Перетягуйте картки мишкою — порядок зберігається на сервері.",
-  },
-  {
-    icon: "◎",
-    title: "Вся команда на виду",
-    text: "Запрошуйте людей у проєкти. Аватарки учасників як у Jira: один клік — і бачите лише задачі конкретної людини.",
-  },
-  {
-    icon: "⚑",
-    title: "Пріоритети та виконавці",
-    text: "Автор, виконавець, пріоритет і опис для кожної картки з унікальним ключем KAN-N.",
-  },
-  {
-    icon: "◐",
-    title: "Світла й темна тема",
-    text: "Перемикайте тему одним кліком. Вхід за email і паролем з bcrypt та HttpOnly-сесіями.",
-  },
-];
+  { icon: "▤", title: "landing.features.boardTitle", text: "landing.features.boardText" },
+  { icon: "◎", title: "landing.features.teamTitle", text: "landing.features.teamText" },
+  { icon: "⚑", title: "landing.features.priorityTitle", text: "landing.features.priorityText" },
+  { icon: "◐", title: "landing.features.prefsTitle", text: "landing.features.prefsText" },
+] as const;
+
+const preview = [
+  { title: "landing.preview.todo", cards: ["landing.preview.card1", "landing.preview.card2"] },
+  { title: "landing.preview.doing", cards: ["landing.preview.card3"] },
+  { title: "landing.preview.done", cards: ["landing.preview.card4", "landing.preview.card5"] },
+] as const;
 
 export default function Landing() {
+  const { t } = useTranslation();
   const { user } = useAuth();
 
   return (
@@ -34,18 +27,19 @@ export default function Landing() {
       <header className="landing-nav">
         <Logo />
         <nav>
+          <LanguageSelect />
           <ThemeToggle />
           {user ? (
             <Link className="btn btn-primary" to="/projects">
-              Відкрити дошку
+              {t("landing.openBoard")}
             </Link>
           ) : (
             <>
               <Link className="btn btn-ghost" to="/login">
-                Увійти
+                {t("landing.signIn")}
               </Link>
               <Link className="btn btn-primary" to="/register">
-                Почати безкоштовно
+                {t("landing.getStarted")}
               </Link>
             </>
           )}
@@ -54,37 +48,30 @@ export default function Landing() {
 
       <section className="hero">
         <div className="hero-text">
-          <span className="pill">Go · SQLite · React</span>
+          <span className="pill">Go · PostgreSQL · React</span>
           <h1>
-            Плануйте роботу команди <span className="accent">без хаосу</span>
+            {t("landing.titleStart")} <span className="accent">{t("landing.titleAccent")}</span>
           </h1>
-          <p>
-            Flowboard — легка kanban-дошка для невеликих команд. Задачі, виконавці та прогрес в одному місці, без
-            зайвих налаштувань.
-          </p>
+          <p>{t("landing.lead")}</p>
           <div className="hero-cta">
             <Link className="btn btn-primary btn-lg" to={user ? "/projects" : "/register"}>
-              {user ? "Перейти до дошки" : "Створити акаунт"}
+              {user ? t("landing.goToBoard") : t("landing.createAccount")}
             </Link>
             {!user && (
               <Link className="btn btn-ghost btn-lg" to="/login">
-                Демо: demo@example.com
+                {t("landing.demo")}
               </Link>
             )}
           </div>
         </div>
 
         <div className="hero-preview" aria-hidden="true">
-          {[
-            ["До виконання", ["Налаштувати CI/CD", "Дизайн профілю"]],
-            ["В роботі", ["API коментарів"]],
-            ["Готово", ["Лендінг", "Фікс логіну"]],
-          ].map(([title, items]) => (
-            <div className="preview-col" key={title as string}>
-              <div className="preview-col-title">{title as string}</div>
-              {(items as string[]).map((t, i) => (
-                <div className="preview-card" key={t}>
-                  <span>{t}</span>
+          {preview.map((col) => (
+            <div className="preview-col" key={col.title}>
+              <div className="preview-col-title">{t(col.title)}</div>
+              {col.cards.map((card, i) => (
+                <div className="preview-card" key={card}>
+                  <span>{t(card)}</span>
                   <span className="preview-dot" style={{ background: ["#0052CC", "#FF5630", "#00875A"][i % 3] }} />
                 </div>
               ))}
@@ -97,17 +84,17 @@ export default function Landing() {
         {features.map((f) => (
           <div className="feature" key={f.title}>
             <div className="feature-icon">{f.icon}</div>
-            <h3>{f.title}</h3>
-            <p>{f.text}</p>
+            <h3>{t(f.title)}</h3>
+            <p>{t(f.text)}</p>
           </div>
         ))}
       </section>
 
       <section className="cta-band">
-        <h2>Готові спробувати?</h2>
-        <p>Реєстрація займає 10 секунд.</p>
+        <h2>{t("landing.ctaTitle")}</h2>
+        <p>{t("landing.ctaText")}</p>
         <Link className="btn btn-light btn-lg" to={user ? "/projects" : "/register"}>
-          {user ? "До дошки" : "Зареєструватися"}
+          {user ? t("landing.ctaBoard") : t("landing.ctaSignUp")}
         </Link>
       </section>
 

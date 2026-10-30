@@ -37,7 +37,7 @@ func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := r.Cookie(sessionCookie)
 		if err != nil {
-			writeError(w, http.StatusUnauthorized, "не авторизовано")
+			fail(w, r, domain.ErrNotAuthenticated)
 			return
 		}
 		u, err := m.auth.Authenticate(r.Context(), c.Value)

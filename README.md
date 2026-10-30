@@ -3,7 +3,8 @@
 ```
 backend/   Go, Clean Architecture: chi (HTTP), uber/fx (DI), PostgreSQL (pgx + goose),
            Redis (сесії), OpenSearch (пошук карток), RustFS/S3 (аватарки)
-frontend/  Vite + React + TypeScript + react-router: лендінг "/", вхід/реєстрація, проєкти "/projects/:id"
+frontend/  Vite + React + TypeScript + react-router + i18next: лендінг "/", вхід/реєстрація,
+           проєкти "/projects/:id", налаштування "/settings"
 ```
 
 ## Архітектура бекенду
@@ -59,7 +60,7 @@ make run            # http://localhost:8080
 Також `olena@`, `andrii@`, `maria@`, `taras@example.com` з тим самим паролем
 (`taras` не входить у жоден проєкт — зручно перевірити додавання учасника).
 
-Схема Postgres створюється міграціями goose під час старту. Дані зі старої SQLite (`backend/kanban.db`)
+Схема Postgres створюється міграціями goose під час старту. Демо-дані (англійською) додаються лише в порожню базу. Дані зі старої SQLite (`backend/kanban.db`)
 не переносяться, тому файл можна видалити.
 У демо-проєкті KAN 48 карток у першій колонці — щоб було видно нескінченний скрол.
 
@@ -84,7 +85,15 @@ make infra-down     # docker compose down
   Браузер обрізає фото до квадрата 256×256, сервер перевіряє тип (PNG/JPEG/WebP/GIF, до 5 МБ)
   і зберігає його в RustFS. Віддається через `/api/users/{id}/avatar?v=…` з кешем «назавжди»
 - Дизайн у стилі Liquid Glass (backdrop-filter, напівпрозорі шари) у світлій і темній темах
-  (за замовчуванням — системна, вибір зберігається)
+- Інтерфейс трьома мовами: англійська, українська, німецька (`frontend/src/i18n/`, i18next).
+  `en.ts` еталонний, і TypeScript вимагає, щоб `uk.ts` і `de.ts` мали всі ті самі ключі.
+  Бекенд, логи й демо-дані англійською
+- Налаштування (`/settings`, посилання внизу сайдбару або клік по аватарці): мова (автоматично або
+  обрана) і тема (автоматично, світла, темна). Зберігаються в акаунті (`users.language`, `users.theme`),
+  тому діють на всіх пристроях. Автоматична мова — перша з мов браузера, яку ми підтримуємо, інакше англійська.
+  Автоматична тема йде за системною. Без входу вибір зберігається лише в цьому браузері
+- Помилки API: `{"error": "<English message>", "code": "<code>"}`. Фронтенд показує переклад
+  `errors.<code>`. Каталог кодів — `backend/internal/domain/catalog.go`
 
 ### Змінні оточення бекенду
 Бекенд читає `../.env` (або файл з `ENV_FILE`). Змінні оточення мають пріоритет.
@@ -108,10 +117,11 @@ make infra-down     # docker compose down
 | POST | `/api/auth/register` | `{name, email, password}` |
 | POST | `/api/auth/login` | `{email, password}` |
 | POST | `/api/auth/logout` | |
-| GET | `/api/auth/me` | поточний користувач |
+| GET | `/api/auth/me` | поточний користувач разом із `settings: {language, theme}` |
 | GET | `/api/users` | усі зареєстровані користувачі (з `avatarUrl`) |
 | PUT | `/api/users/me/avatar` | `multipart/form-data`, поле `avatar` — PNG/JPEG/WebP/GIF до 5 МБ |
 | DELETE | `/api/users/me/avatar` | видалити свою аватарку |
+| PUT | `/api/users/me/settings` | `{language: auto\|en\|uk\|de, theme: auto\|light\|dark}` |
 | GET | `/api/users/{id}/avatar?v=` | зображення аватарки |
 | GET | `/api/projects` | проєкти поточного користувача |
 | POST | `/api/projects` | `{name, key}` — творець стає власником |

@@ -1,13 +1,18 @@
 import { useState, type FormEvent, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
+import { LanguageSelect } from "../components/LanguageSelect";
 import { Logo } from "../components/Logo";
 
 function AuthLayout({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <Logo />
+        <div className="auth-card-head">
+          <Logo />
+          <LanguageSelect />
+        </div>
         <h1>{title}</h1>
         {children}
       </div>
@@ -23,6 +28,7 @@ function useAfterAuth() {
 }
 
 export function Login() {
+  const { t } = useTranslation();
   const { user, login } = useAuth();
   const done = useAfterAuth();
   const [email, setEmail] = useState("");
@@ -47,32 +53,33 @@ export function Login() {
   }
 
   return (
-    <AuthLayout title="Вхід">
+    <AuthLayout title={t("auth.signInTitle")}>
       <form onSubmit={onSubmit} className="form">
         <label>
-          Email
+          {t("common.email")}
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
         </label>
         <label>
-          Пароль
+          {t("common.password")}
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         </label>
         {error && <div className="form-error">{error}</div>}
         <button className="btn btn-primary btn-block" disabled={busy}>
-          {busy ? "Входимо…" : "Увійти"}
+          {busy ? t("auth.signingIn") : t("auth.signIn")}
         </button>
       </form>
       <p className="auth-hint">
-        Демо-акаунт: <code>demo@example.com</code> / <code>demo1234</code>
+        {t("auth.demoAccount")} <code>demo@example.com</code> / <code>demo1234</code>
       </p>
       <p className="auth-switch">
-        Немає акаунту? <Link to="/register">Зареєструватися</Link>
+        {t("auth.noAccount")} <Link to="/register">{t("auth.signUp")}</Link>
       </p>
     </AuthLayout>
   );
 }
 
 export function Register() {
+  const { t } = useTranslation();
   const { user, register } = useAuth();
   const done = useAfterAuth();
   const [name, setName] = useState("");
@@ -98,18 +105,18 @@ export function Register() {
   }
 
   return (
-    <AuthLayout title="Реєстрація">
+    <AuthLayout title={t("auth.signUpTitle")}>
       <form onSubmit={onSubmit} className="form">
         <label>
-          Ім'я
+          {t("common.name")}
           <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus maxLength={100} />
         </label>
         <label>
-          Email
+          {t("common.email")}
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </label>
         <label>
-          Пароль
+          {t("common.password")}
           <input
             type="password"
             value={password}
@@ -118,15 +125,15 @@ export function Register() {
             minLength={8}
             maxLength={72}
           />
-          <small>Мінімум 8 символів</small>
+          <small>{t("auth.passwordHint")}</small>
         </label>
         {error && <div className="form-error">{error}</div>}
         <button className="btn btn-primary btn-block" disabled={busy}>
-          {busy ? "Створюємо…" : "Створити акаунт"}
+          {busy ? t("auth.creating") : t("auth.createAccount")}
         </button>
       </form>
       <p className="auth-switch">
-        Вже є акаунт? <Link to="/login">Увійти</Link>
+        {t("auth.haveAccount")} <Link to="/login">{t("auth.signIn")}</Link>
       </p>
     </AuthLayout>
   );

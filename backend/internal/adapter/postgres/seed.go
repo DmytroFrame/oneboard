@@ -36,11 +36,11 @@ func (s *Seeder) seed(ctx context.Context) error {
 		return err
 	}
 	people := []struct{ name, email string }{
-		{"Демо Користувач", "demo@example.com"},
-		{"Олена Коваль", "olena@example.com"},
-		{"Андрій Шевченко", "andrii@example.com"},
-		{"Марія Бондар", "maria@example.com"},
-		{"Тарас Мельник", "taras@example.com"},
+		{"Demo User", "demo@example.com"},
+		{"Olena Koval", "olena@example.com"},
+		{"Andrii Shevchenko", "andrii@example.com"},
+		{"Maria Bondar", "maria@example.com"},
+		{"Taras Melnyk", "taras@example.com"},
 	}
 	uid := make([]int64, len(people))
 	for i, p := range people {
@@ -64,19 +64,19 @@ func (s *Seeder) seed(ctx context.Context) error {
 		backlog   int // extra generated cards in the first column, to demo infinite scroll
 	}{
 		{"Flowboard", "KAN", []int{1, 2, 3}, []card{
-			{"Налаштувати CI/CD", "GitHub Actions: lint, тести, збірка Docker-образу.", "high", 0, 0, 2},
-			{"Дизайн сторінки профілю", "Макети у Figma для десктопу та мобілки.", "medium", 0, 1, 3},
-			{"Додати пошук по задачах", "Повнотекстовий пошук через OpenSearch.", "low", 0, 2, -1},
-			{"API для коментарів", "CRUD ендпоінти + пагінація.", "high", 1, 0, 0},
-			{"Міграція на PostgreSQL", "Перенести дані зі SQLite, сесії — у Redis.", "medium", 1, 2, 2},
-			{"Онбординг нових користувачів", "Покроковий тур по дошці.", "medium", 2, 3, 1},
-			{"Виправити баг з логіном", "Сесія злітає після перезавантаження сторінки.", "critical", 3, 1, 0},
-			{"Лендінг сторінка", "", "low", 3, 3, 3},
+			{"Set up CI/CD", "GitHub Actions: lint, tests, Docker image build.", "high", 0, 0, 2},
+			{"Profile page design", "Figma mockups for desktop and mobile.", "medium", 0, 1, 3},
+			{"Add task search", "Full-text search with OpenSearch.", "low", 0, 2, -1},
+			{"Comments API", "CRUD endpoints with pagination.", "high", 1, 0, 0},
+			{"Migrate to PostgreSQL", "Move data off SQLite, sessions to Redis.", "medium", 1, 2, 2},
+			{"New user onboarding", "Step-by-step board tour.", "medium", 2, 3, 1},
+			{"Fix login bug", "Session is lost after a page reload.", "critical", 3, 1, 0},
+			{"Landing page", "", "low", 3, 3, 3},
 		}, 45},
-		{"Мобільний застосунок", "MOB", []int{1}, []card{
-			{"Екран входу", "", "high", 0, 0, 1},
-			{"Push-сповіщення", "Firebase Cloud Messaging.", "medium", 1, 1, 0},
-			{"Темна тема", "", "low", 3, 0, 1},
+		{"Mobile App", "MOB", []int{1}, []card{
+			{"Sign-in screen", "", "high", 0, 0, 1},
+			{"Push notifications", "Firebase Cloud Messaging.", "medium", 1, 1, 0},
+			{"Dark theme", "", "low", 3, 0, 1},
 		}, 0},
 	}
 
@@ -104,7 +104,7 @@ func (s *Seeder) seed(ctx context.Context) error {
 			team = append(team, m)
 		}
 		for i := range p.backlog {
-			p.cards = append(p.cards, card{fmt.Sprintf("Задача з беклогу #%d", i+1), "", priorities[i%4], 0, team[i%len(team)], team[(i+1)%len(team)]})
+			p.cards = append(p.cards, card{fmt.Sprintf("Backlog task #%d", i+1), "", priorities[i%4], 0, team[i%len(team)], team[(i+1)%len(team)]})
 		}
 		for _, c := range p.cards {
 			d := domain.CardDraft{Title: c.title, Description: c.desc, Priority: c.priority}

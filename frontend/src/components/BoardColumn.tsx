@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import type { Card, Column, User } from "../types";
 import { Avatar } from "./Avatar";
 
@@ -11,11 +12,11 @@ export interface ColumnState {
   error: string;
 }
 
-const PRIORITY_ICON: Record<Card["priority"], { icon: string; color: string; label: string }> = {
-  low: { icon: "↓", color: "#30a7ff", label: "Низький" },
-  medium: { icon: "=", color: "#ff9f0a", label: "Середній" },
-  high: { icon: "↑", color: "#ff6b3d", label: "Високий" },
-  critical: { icon: "⇈", color: "#ff375f", label: "Критичний" },
+const PRIORITY_ICON: Record<Card["priority"], { icon: string; color: string }> = {
+  low: { icon: "↓", color: "#30a7ff" },
+  medium: { icon: "=", color: "#ff9f0a" },
+  high: { icon: "↑", color: "#ff6b3d" },
+  critical: { icon: "⇈", color: "#ff375f" },
 };
 
 interface Props {
@@ -39,6 +40,7 @@ interface Props {
 }
 
 export function BoardColumn(props: Props) {
+  const { t } = useTranslation();
   const { state, index, allColumns, isOwner, draggingId, dropBeforeId, membersById } = props;
   const bodyRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -101,17 +103,17 @@ export function BoardColumn(props: Props) {
         <div className="spacer" />
         {isOwner && (
           <div className="column-menu-wrap" ref={menuRef}>
-            <button className="icon-btn icon-btn--sm" onClick={() => setMenu(menu === "closed" ? "open" : "closed")} aria-label="Дії з колонкою">
+            <button className="icon-btn icon-btn--sm" onClick={() => setMenu(menu === "closed" ? "open" : "closed")} aria-label={t("column.actions")}>
               ⋯
             </button>
             {menu === "open" && (
               <div className="menu column-menu">
-                <button onClick={() => (setMenu("closed"), setRenaming(true))}>Перейменувати</button>
+                <button onClick={() => (setMenu("closed"), setRenaming(true))}>{t("column.rename")}</button>
                 <button disabled={index === 0} onClick={() => (setMenu("closed"), props.onMove(index - 1))}>
-                  ← Перемістити ліворуч
+                  {t("column.moveLeft")}
                 </button>
                 <button disabled={index === allColumns.length - 1} onClick={() => (setMenu("closed"), props.onMove(index + 1))}>
-                  Перемістити праворуч →
+                  {t("column.moveRight")}
                 </button>
                 <button
                   className="menu-danger"
@@ -121,15 +123,15 @@ export function BoardColumn(props: Props) {
                     setMenu("delete");
                   }}
                 >
-                  Видалити колонку
+                  {t("column.delete")}
                 </button>
               </div>
             )}
             {menu === "delete" && (
               <div className="menu column-menu column-menu--form">
-                <strong>Видалити «{state.column.name}»?</strong>
+                <strong>{t("column.deleteConfirm", { name: state.column.name })}</strong>
                 <label>
-                  Картки перенести в
+                  {t("column.moveCardsTo")}
                   <select value={moveTo ?? ""} onChange={(e) => setMoveTo(Number(e.target.value))}>
                     {others.map((c) => (
                       <option key={c.id} value={c.id}>
@@ -140,10 +142,10 @@ export function BoardColumn(props: Props) {
                 </label>
                 <div className="menu-actions">
                   <button className="btn btn-ghost btn-sm" onClick={() => setMenu("closed")}>
-                    Скасувати
+                    {t("common.cancel")}
                   </button>
                   <button className="btn btn-danger-solid btn-sm" onClick={() => (setMenu("closed"), props.onDelete(moveTo))}>
-                    Видалити
+                    {t("common.delete")}
                   </button>
                 </div>
               </div>
@@ -169,7 +171,7 @@ export function BoardColumn(props: Props) {
                 <span
                   className="priority"
                   style={{ color: PRIORITY_ICON[card.priority].color }}
-                  title={`Пріоритет: ${PRIORITY_ICON[card.priority].label}`}
+                  title={t("priority.label", { name: t(`priority.${card.priority}`) })}
                 >
                   {PRIORITY_ICON[card.priority].icon}
                 </span>
@@ -185,21 +187,21 @@ export function BoardColumn(props: Props) {
         {hasMore && <div ref={sentinelRef} className="sentinel" />}
         {state.loading && (
           <div className="column-status">
-            <span className="spinner" /> Завантаження…
+            <span className="spinner" /> {t("common.loading")}
           </div>
         )}
         {state.error && (
           <div className="column-status column-status--error">
             {state.error}{" "}
             <button className="btn btn-link btn-sm" onClick={props.onLoadMore}>
-              Повторити
+              {t("common.retry")}
             </button>
           </div>
         )}
-        {!state.loading && state.cards.length === 0 && !hasMore && <div className="column-empty">Порожньо</div>}
+        {!state.loading && state.cards.length === 0 && !hasMore && <div className="column-empty">{t("column.empty")}</div>}
 
         <button className="add-card" onClick={props.onAddCard}>
-          + Створити задачу
+          {t("column.createTask")}
         </button>
       </div>
     </section>
@@ -207,6 +209,7 @@ export function BoardColumn(props: Props) {
 }
 
 export function AddColumn({ onAdd }: { onAdd: (name: string) => Promise<void> }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -227,7 +230,7 @@ export function AddColumn({ onAdd }: { onAdd: (name: string) => Promise<void> })
   if (!open) {
     return (
       <button className="add-column" onClick={() => setOpen(true)}>
-        + Додати колонку
+        {t("column.addColumn")}
       </button>
     );
   }
@@ -237,16 +240,16 @@ export function AddColumn({ onAdd }: { onAdd: (name: string) => Promise<void> })
         value={name}
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
-        placeholder="Назва колонки"
+        placeholder={t("column.namePlaceholder")}
         maxLength={60}
         autoFocus
       />
       <div className="menu-actions">
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>
-          Скасувати
+          {t("common.cancel")}
         </button>
         <button className="btn btn-primary btn-sm" disabled={busy || !name.trim()}>
-          Додати
+          {t("common.add")}
         </button>
       </div>
     </form>

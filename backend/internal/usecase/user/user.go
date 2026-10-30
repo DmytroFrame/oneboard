@@ -35,6 +35,7 @@ type Users interface {
 	ByID(ctx context.Context, id int64) (domain.User, error)
 	// SetAvatar stores the new key (or "" to clear) and returns the previous one.
 	SetAvatar(ctx context.Context, userID int64, key string, at time.Time) (oldKey string, err error)
+	SetSettings(ctx context.Context, userID int64, s domain.Settings) error
 }
 
 type ObjectInfo struct {
@@ -69,15 +70,15 @@ func (s *Service) UploadAvatar(ctx context.Context, userID int64, r io.Reader) (
 		return domain.User{}, err
 	}
 	if len(data) == 0 {
-		return domain.User{}, domain.Validation("файл порожній")
+		return domain.User{}, domain.ErrAvatarEmpty
 	}
 	if len(data) > MaxAvatarBytes {
-		return domain.User{}, domain.TooLarge("аватарка має бути до 5 МБ")
+		return domain.User{}, domain.ErrAvatarTooLarge
 	}
 	contentType := http.DetectContentType(data)
 	ext, ok := avatarTypes[contentType]
 	if !ok {
-		return domain.User{}, domain.Validation("підтримуються PNG, JPEG, WebP або GIF")
+		return domain.User{}, domain.ErrAvatarType
 	}
 
 	// A new key per upload lets clients cache avatars forever.
@@ -121,14 +122,25 @@ func (s *Service) deleteObject(ctx context.Context, key string) {
 func (s *Service) Avatar(ctx context.Context, userID int64) (io.ReadCloser, ObjectInfo, error) {
 	u, err := s.users.ByID(ctx, userID)
 	if err != nil {
-		return nil, ObjectInfo{}, usecase.NotFoundAs(err, "користувача не знайдено")
+		return nil, ObjectInfo{}, usecase.NotFoundAs(err, domain.ErrUserNotFound)
 	}
 	if !u.HasAvatar() {
-		return nil, ObjectInfo{}, domain.NotFound("аватарки немає")
+		return nil, ObjectInfo{}, domain.ErrAvatarNotFound
 	}
 	body, info, err := s.storage.Get(ctx, u.AvatarKey)
 	if err != nil {
-		return nil, ObjectInfo{}, usecase.NotFoundAs(err, "аватарки немає")
+		return nil, ObjectInfo{}, usecase.NotFoundAs(err, domain.ErrAvatarNotFound)
 	}
 	return body, info, nil
+}
+
+// UpdateSettings stores the user's language and theme preferences.
+func (s *Service) UpdateSettings(ctx context.Context, userID int64, settings domain.Settings) (domain.User, error) {
+	if err := settings.Validate(); err != nil {
+		return domain.User{}, err
+	}
+	if err := s.users.SetSettings(ctx, userID, settings); err != nil {
+		return domain.User{}, err
+	}
+	return s.users.ByID(ctx, userID)
 }

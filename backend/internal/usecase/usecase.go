@@ -21,35 +21,35 @@ type Memberships interface {
 	Role(ctx context.Context, projectID, userID int64) (domain.Role, error)
 }
 
-// RequireMember returns the user's role, or NotFound(msg) if they aren't a member —
+// RequireMember returns the user's role, or notFound if they aren't a member —
 // outsiders can't tell a foreign project from a missing one.
-func RequireMember(ctx context.Context, m Memberships, projectID, userID int64, msg string) (domain.Role, error) {
+func RequireMember(ctx context.Context, m Memberships, projectID, userID int64, notFound error) (domain.Role, error) {
 	role, err := m.Role(ctx, projectID, userID)
 	if err != nil {
 		return "", err
 	}
 	if role == domain.RoleNone {
-		return "", domain.NotFound(msg)
+		return "", notFound
 	}
 	return role, nil
 }
 
-// RequireOwner is RequireMember plus Forbidden(forbiddenMsg) for non-owners.
-func RequireOwner(ctx context.Context, m Memberships, projectID, userID int64, notFoundMsg, forbiddenMsg string) error {
-	role, err := RequireMember(ctx, m, projectID, userID, notFoundMsg)
+// RequireOwner is RequireMember plus domain.ErrOwnerOnly for non-owners.
+func RequireOwner(ctx context.Context, m Memberships, projectID, userID int64, notFound error) error {
+	role, err := RequireMember(ctx, m, projectID, userID, notFound)
 	if err != nil {
 		return err
 	}
 	if role != domain.RoleOwner {
-		return domain.Forbidden(forbiddenMsg)
+		return domain.ErrOwnerOnly
 	}
 	return nil
 }
 
-// NotFoundAs converts a repository ErrNoRows into a user-facing NotFound.
-func NotFoundAs(err error, msg string) error {
+// NotFoundAs converts a repository ErrNoRows into the given business error.
+func NotFoundAs(err error, notFound error) error {
 	if errors.Is(err, domain.ErrNoRows) {
-		return domain.NotFound(msg)
+		return notFound
 	}
 	return err
 }

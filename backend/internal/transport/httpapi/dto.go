@@ -31,6 +31,21 @@ func toUser(u domain.User) userDTO {
 	return d
 }
 
+type settingsDTO struct {
+	Language domain.Language `json:"language"`
+	Theme    domain.Theme    `json:"theme"`
+}
+
+// meDTO is the signed-in user; settings are private and only ever returned to their owner.
+type meDTO struct {
+	userDTO
+	Settings settingsDTO `json:"settings"`
+}
+
+func toMe(u domain.User) meDTO {
+	return meDTO{toUser(u), settingsDTO{u.Settings.Language, u.Settings.Theme}}
+}
+
 type memberDTO struct {
 	userDTO
 	Role          domain.Role `json:"role"`

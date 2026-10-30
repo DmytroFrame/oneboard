@@ -13,7 +13,45 @@ type User struct {
 	PasswordHash    string
 	AvatarKey       string     // object key in the avatar storage; "" = no avatar
 	AvatarUpdatedAt *time.Time // used to version the avatar URL for caching
+	Settings        Settings
 	CreatedAt       time.Time
+}
+
+// Settings are the user's interface preferences, stored with the account so they follow them across devices.
+type Settings struct {
+	Language Language
+	Theme    Theme
+}
+
+type Language string
+
+const (
+	LanguageAuto Language = "auto" // follow the browser
+	LanguageEN   Language = "en"
+	LanguageUK   Language = "uk"
+	LanguageDE   Language = "de"
+)
+
+type Theme string
+
+const (
+	ThemeAuto  Theme = "auto" // follow the OS
+	ThemeLight Theme = "light"
+	ThemeDark  Theme = "dark"
+)
+
+func (s Settings) Validate() error {
+	switch s.Language {
+	case LanguageAuto, LanguageEN, LanguageUK, LanguageDE:
+	default:
+		return ErrLanguageInvalid
+	}
+	switch s.Theme {
+	case ThemeAuto, ThemeLight, ThemeDark:
+	default:
+		return ErrThemeInvalid
+	}
+	return nil
 }
 
 func (u User) HasAvatar() bool { return u.AvatarKey != "" }
@@ -49,7 +87,7 @@ type Member struct {
 }
 
 // DefaultColumns are created for every new project.
-var DefaultColumns = []string{"До виконання", "В роботі", "На перевірці", "Готово"}
+var DefaultColumns = []string{"To Do", "In Progress", "Review", "Done"}
 
 const MaxColumnsPerProject = 20
 
@@ -104,16 +142,16 @@ type CardDraft struct {
 func (d *CardDraft) Normalize() error {
 	d.Title = strings.TrimSpace(d.Title)
 	if d.Title == "" || len(d.Title) > 200 {
-		return Validation("назва обов'язкова (до 200 символів)")
+		return ErrCardTitle
 	}
 	if len(d.Description) > 10000 {
-		return Validation("опис занадто довгий")
+		return ErrCardDescription
 	}
 	if d.Priority == "" {
 		d.Priority = PriorityMedium
 	}
 	if !d.Priority.Valid() {
-		return Validation("некоректний пріоритет")
+		return ErrPriorityInvalid
 	}
 	return nil
 }

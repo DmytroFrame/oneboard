@@ -44,7 +44,7 @@ func (h *CardHandler) list(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	columnID, err := strconv.ParseInt(q.Get("column"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "вкажіть column")
+		writeError(w, http.StatusBadRequest, "column_required", "The column parameter is required")
 		return
 	}
 	query := board.ListQuery{
@@ -61,7 +61,7 @@ func (h *CardHandler) list(w http.ResponseWriter, r *http.Request) {
 	if c := q.Get("cursor"); c != "" {
 		var cur domain.CardCursor
 		if _, err := fmt.Sscanf(c, "%d:%d", &cur.Position, &cur.ID); err != nil {
-			writeError(w, http.StatusBadRequest, "некоректний cursor")
+			writeError(w, http.StatusBadRequest, "cursor_invalid", "Invalid cursor")
 			return
 		}
 		query.Cursor = &cur

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import type { Member, Project, User } from "../types";
 import { Avatar } from "./Avatar";
 
 export function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
+  const { t } = useTranslation();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -15,7 +17,7 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
       <div className={`modal ${wide ? "" : "modal--narrow"}`}>
         <div className="modal-header">
           <span className="modal-title">{title}</span>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="Закрити">
+          <button type="button" className="icon-btn" onClick={onClose} aria-label={t("common.close")}>
             ✕
           </button>
         </div>
@@ -33,6 +35,7 @@ function suggestKey(name: string) {
 }
 
 export function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: Project) => Promise<void> }) {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
   const [keyTouched, setKeyTouched] = useState(false);
@@ -54,24 +57,24 @@ export function CreateProjectModal({ onClose, onCreated }: { onClose: () => void
   }
 
   return (
-    <Modal title="Новий проєкт" onClose={onClose}>
+    <Modal title={t("project.newTitle")} onClose={onClose}>
       <form className="form modal-content" onSubmit={submit}>
         <label>
-          Назва
+          {t("common.name")}
           <input
             value={name}
             onChange={(e) => {
               setName(e.target.value);
               if (!keyTouched) setKey(suggestKey(e.target.value));
             }}
-            placeholder="Наприклад: Website Redesign"
+            placeholder={t("project.namePlaceholder")}
             maxLength={100}
             required
             autoFocus
           />
         </label>
         <label>
-          Ключ
+          {t("project.key")}
           <input
             value={key}
             onChange={(e) => {
@@ -84,15 +87,15 @@ export function CreateProjectModal({ onClose, onCreated }: { onClose: () => void
             pattern="[A-Z][A-Z0-9]{1,9}"
             required
           />
-          <small>Префікс задач: {key || "KEY"}-1, {key || "KEY"}-2… (латиниця, 2–10 символів)</small>
+          <small>{t("project.keyHint", { key: key || "KEY" })}</small>
         </label>
         {error && <div className="form-error">{error}</div>}
         <div className="modal-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose}>
-            Скасувати
+            {t("common.cancel")}
           </button>
           <button className="btn btn-primary" disabled={busy}>
-            Створити
+            {t("common.create")}
           </button>
         </div>
       </form>
@@ -119,6 +122,7 @@ export function ProjectSettingsModal({
   onProjectChanged,
   onLeftOrDeleted,
 }: SettingsProps) {
+  const { t } = useTranslation();
   const isOwner = project.role === "owner";
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [query, setQuery] = useState("");
@@ -154,7 +158,7 @@ export function ProjectSettingsModal({
 
   const remove = (m: Member) =>
     run(async () => {
-      if (!confirm(`Видалити ${m.name} з проєкту? Його задачі стануть непризначеними.`)) return;
+      if (!confirm(t("project.confirmRemoveMember", { name: m.name }))) return;
       await api.removeMember(project.id, m.id);
       onMembersChanged(members.filter((x) => x.id !== m.id));
     });
@@ -169,37 +173,37 @@ export function ProjectSettingsModal({
 
   const leave = () =>
     run(async () => {
-      if (!confirm(`Вийти з проєкту «${project.name}»?`)) return;
+      if (!confirm(t("project.confirmLeave", { name: project.name }))) return;
       await api.removeMember(project.id, currentUserId);
       await onLeftOrDeleted();
     });
 
   const destroy = () =>
     run(async () => {
-      if (!confirm(`Видалити проєкт «${project.name}» разом з усіма задачами? Це незворотно.`)) return;
+      if (!confirm(t("project.confirmDelete", { name: project.name }))) return;
       await api.deleteProject(project.id);
       await onLeftOrDeleted();
     });
 
   return (
-    <Modal title={`Налаштування · ${project.key}`} onClose={onClose} wide>
+    <Modal title={t("project.settingsTitle", { key: project.key })} onClose={onClose} wide>
       <div className="modal-content settings">
         {error && <div className="form-error">{error}</div>}
 
         {isOwner && (
           <section>
-            <h3>Назва проєкту</h3>
+            <h3>{t("project.projectName")}</h3>
             <form className="inline-form" onSubmit={rename}>
               <input value={name} onChange={(e) => setName(e.target.value)} maxLength={100} required />
               <button className="btn btn-ghost" disabled={busy || name.trim() === project.name}>
-                Зберегти
+                {t("common.save")}
               </button>
             </form>
           </section>
         )}
 
         <section>
-          <h3>Учасники · {members.length}</h3>
+          <h3>{t("project.members", { count: members.length })}</h3>
           <div className="member-list">
             {members.map((m) => (
               <div className="member-row" key={m.id}>
@@ -207,14 +211,14 @@ export function ProjectSettingsModal({
                 <div className="member-info">
                   <span>
                     {m.name}
-                    {m.id === currentUserId && <em> (ви)</em>}
+                    {m.id === currentUserId && <em> {t("common.you")}</em>}
                   </span>
                   <small>{m.email}</small>
                 </div>
-                <span className={`role role--${m.role}`}>{m.role === "owner" ? "Власник" : "Учасник"}</span>
+                <span className={`role role--${m.role}`}>{t(`roles.${m.role}`)}</span>
                 {isOwner && m.role !== "owner" && (
                   <button className="btn btn-danger btn-sm" onClick={() => remove(m)} disabled={busy}>
-                    Видалити
+                    {t("common.remove")}
                   </button>
                 )}
               </div>
@@ -224,17 +228,17 @@ export function ProjectSettingsModal({
 
         {isOwner && (
           <section>
-            <h3>Додати людей</h3>
+            <h3>{t("project.addPeople")}</h3>
             <input
               className="member-search"
-              placeholder="Пошук за ім'ям або email"
+              placeholder={t("project.searchPeople")}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
             <div className="member-list member-list--scroll">
               {candidates.length === 0 && (
                 <div className="muted">
-                  {allUsers.length === 0 ? "Завантаження…" : "Немає користувачів для додавання"}
+                  {allUsers.length === 0 ? t("common.loading") : t("project.noCandidates")}
                 </div>
               )}
               {candidates.map((u) => (
@@ -245,12 +249,12 @@ export function ProjectSettingsModal({
                     <small>{u.email}</small>
                   </div>
                   <button className="btn btn-primary btn-sm" onClick={() => add(u)} disabled={busy}>
-                    Додати
+                    {t("common.add")}
                   </button>
                 </div>
               ))}
             </div>
-            <p className="muted">Людина має спершу зареєструватися у Flowboard.</p>
+            <p className="muted">{t("project.mustRegister")}</p>
           </section>
         )}
 
@@ -258,21 +262,21 @@ export function ProjectSettingsModal({
           {isOwner ? (
             <>
               <div>
-                <strong>Видалити проєкт</strong>
-                <p className="muted">Усі задачі проєкту буде видалено назавжди.</p>
+                <strong>{t("project.deleteTitle")}</strong>
+                <p className="muted">{t("project.deleteText")}</p>
               </div>
               <button className="btn btn-danger-solid" onClick={destroy} disabled={busy}>
-                Видалити проєкт
+                {t("project.deleteTitle")}
               </button>
             </>
           ) : (
             <>
               <div>
-                <strong>Вийти з проєкту</strong>
-                <p className="muted">Ваші задачі в цьому проєкті стануть непризначеними.</p>
+                <strong>{t("project.leaveTitle")}</strong>
+                <p className="muted">{t("project.leaveText")}</p>
               </div>
               <button className="btn btn-danger-solid" onClick={leave} disabled={busy}>
-                Вийти
+                {t("project.leave")}
               </button>
             </>
           )}

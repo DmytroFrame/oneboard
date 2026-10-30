@@ -55,13 +55,13 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (domain.User, 
 	name := strings.TrimSpace(in.Name)
 	email := strings.ToLower(strings.TrimSpace(in.Email))
 	if name == "" || len(name) > 100 {
-		return domain.User{}, "", domain.Validation("вкажіть ім'я (до 100 символів)")
+		return domain.User{}, "", domain.ErrNameInvalid
 	}
 	if _, err := mail.ParseAddress(email); err != nil {
-		return domain.User{}, "", domain.Validation("некоректний email")
+		return domain.User{}, "", domain.ErrEmailInvalid
 	}
 	if len(in.Password) < 8 || len(in.Password) > 72 {
-		return domain.User{}, "", domain.Validation("пароль має містити від 8 до 72 символів")
+		return domain.User{}, "", domain.ErrPasswordInvalid
 	}
 
 	hash, err := s.hasher.Hash(in.Password)
@@ -80,7 +80,7 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (domain.User, 
 	}
 	if err := s.users.Create(ctx, &u); err != nil {
 		if errors.Is(err, domain.ErrDuplicate) {
-			return domain.User{}, "", domain.Conflict("користувач з таким email вже існує")
+			return domain.User{}, "", domain.ErrEmailTaken
 		}
 		return domain.User{}, "", err
 	}
@@ -94,7 +94,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (domain.Use
 		return domain.User{}, "", err
 	}
 	if err != nil || !s.hasher.Compare(u.PasswordHash, password) {
-		return domain.User{}, "", domain.Unauthorized("невірний email або пароль")
+		return domain.User{}, "", domain.ErrInvalidCredentials
 	}
 	token, err := s.sessions.Create(ctx, u.ID, SessionTTL)
 	return u, token, err
@@ -108,7 +108,7 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 func (s *Service) Authenticate(ctx context.Context, token string) (domain.User, error) {
 	id, err := s.sessions.Resolve(ctx, token)
 	if errors.Is(err, domain.ErrNoRows) {
-		return domain.User{}, domain.Unauthorized("сесія недійсна")
+		return domain.User{}, domain.ErrSessionInvalid
 	}
 	if err != nil {
 		return domain.User{}, err
@@ -116,7 +116,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (domain.User, 
 	u, err := s.users.ByID(ctx, id)
 	if errors.Is(err, domain.ErrNoRows) {
 		_ = s.sessions.Delete(ctx, token)
-		return domain.User{}, domain.Unauthorized("сесія недійсна")
+		return domain.User{}, domain.ErrSessionInvalid
 	}
 	return u, err
 }

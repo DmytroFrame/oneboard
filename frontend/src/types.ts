@@ -8,6 +8,20 @@ export interface User {
   avatarUrl: string | null;
 }
 
+export type Locale = "en" | "uk" | "de";
+export type LanguagePref = "auto" | Locale;
+export type ThemePref = "auto" | "light" | "dark";
+
+export interface Settings {
+  language: LanguagePref;
+  theme: ThemePref;
+}
+
+/** The signed-in user: settings are only returned for yourself. */
+export interface CurrentUser extends User {
+  settings: Settings;
+}
+
 export type Role = "owner" | "member";
 
 export interface Member extends User {
@@ -69,9 +83,4 @@ export interface CardFilters {
   unassigned: boolean;
 }
 
-export const PRIORITIES: { id: Priority; title: string }[] = [
-  { id: "low", title: "Низький" },
-  { id: "medium", title: "Середній" },
-  { id: "high", title: "Високий" },
-  { id: "critical", title: "Критичний" },
-];
+export const PRIORITIES: Priority[] = ["low", "medium", "high", "critical"];

@@ -1,4 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { PRIORITIES, type Card, type CardInput, type Column, type Priority, type User } from "../types";
 import { Avatar } from "./Avatar";
 
@@ -14,9 +15,9 @@ interface Props {
   onDelete: (card: Card) => Promise<void>;
 }
 
-const dateFmt = new Intl.DateTimeFormat("uk-UA", { dateStyle: "medium", timeStyle: "short" });
-
 export function CardModal({ card, initialColumnId, columns, users, currentUser, canDelete, onClose, onSave, onDelete }: Props) {
+  const { t, i18n } = useTranslation();
+  const dateFmt = useMemo(() => new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeStyle: "short" }), [i18n.language]);
   const [title, setTitle] = useState(card?.title ?? "");
   const [description, setDescription] = useState(card?.description ?? "");
   const [columnId, setColumnId] = useState(card?.columnId ?? initialColumnId);
@@ -48,7 +49,7 @@ export function CardModal({ card, initialColumnId, columns, users, currentUser, 
   }
 
   async function remove() {
-    if (!card || !confirm(`Видалити ${card.key}?`)) return;
+    if (!card || !confirm(t("card.deleteConfirm", { key: card.key }))) return;
     setBusy(true);
     try {
       await onDelete(card);
@@ -63,8 +64,8 @@ export function CardModal({ card, initialColumnId, columns, users, currentUser, 
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <form className="modal" onSubmit={submit}>
         <div className="modal-header">
-          <span className="modal-key">{card ? card.key : "Нова задача"}</span>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="Закрити">
+          <span className="modal-key">{card ? card.key : t("card.newTask")}</span>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label={t("common.close")}>
             ✕
           </button>
         </div>
@@ -75,18 +76,18 @@ export function CardModal({ card, initialColumnId, columns, users, currentUser, 
               className="title-input"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Що потрібно зробити?"
+              placeholder={t("card.titlePlaceholder")}
               maxLength={200}
               required
               autoFocus
             />
             <label className="field">
-              Опис
+              {t("card.description")}
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={8}
-                placeholder="Додайте деталі…"
+                placeholder={t("card.descriptionPlaceholder")}
               />
             </label>
             {error && <div className="form-error">{error}</div>}
@@ -94,7 +95,7 @@ export function CardModal({ card, initialColumnId, columns, users, currentUser, 
 
           <aside className="modal-side">
             <label className="field">
-              Колонка
+              {t("card.column")}
               <select value={columnId} onChange={(e) => setColumnId(Number(e.target.value))}>
                 {columns.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -105,14 +106,14 @@ export function CardModal({ card, initialColumnId, columns, users, currentUser, 
             </label>
 
             <label className="field">
-              Виконавець
+              {t("card.assignee")}
               <div className="select-with-avatar">
                 <Avatar user={assignee} size={24} />
                 <select
                   value={assigneeId ?? ""}
                   onChange={(e) => setAssigneeId(e.target.value ? Number(e.target.value) : null)}
                 >
-                  <option value="">Не призначено</option>
+                  <option value="">{t("common.unassigned")}</option>
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name}
@@ -123,28 +124,28 @@ export function CardModal({ card, initialColumnId, columns, users, currentUser, 
             </label>
 
             <label className="field">
-              Пріоритет
+              {t("card.priority")}
               <select value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>
                 {PRIORITIES.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.title}
+                  <option key={p} value={p}>
+                    {t(`priority.${p}`)}
                   </option>
                 ))}
               </select>
             </label>
 
             <div className="field">
-              Автор
+              {t("card.author")}
               <div className="person">
                 <Avatar user={author} size={24} />
-                <span>{author?.name ?? "Колишній учасник"}</span>
+                <span>{author?.name ?? t("common.formerMember")}</span>
               </div>
             </div>
 
             {card && (
               <div className="meta">
-                <div>Створено: {dateFmt.format(new Date(card.createdAt))}</div>
-                <div>Оновлено: {dateFmt.format(new Date(card.updatedAt))}</div>
+                <div>{t("card.created", { date: dateFmt.format(new Date(card.createdAt)) })}</div>
+                <div>{t("card.updated", { date: dateFmt.format(new Date(card.updatedAt)) })}</div>
               </div>
             )}
           </aside>
@@ -153,15 +154,15 @@ export function CardModal({ card, initialColumnId, columns, users, currentUser, 
         <div className="modal-footer">
           {canDelete && (
             <button type="button" className="btn btn-danger" onClick={remove} disabled={busy}>
-              Видалити
+              {t("common.delete")}
             </button>
           )}
           <div className="spacer" />
           <button type="button" className="btn btn-ghost" onClick={onClose}>
-            Скасувати
+            {t("common.cancel")}
           </button>
           <button className="btn btn-primary" disabled={busy}>
-            {card ? "Зберегти" : "Створити"}
+            {card ? t("common.save") : t("common.create")}
           </button>
         </div>
       </form>

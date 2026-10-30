@@ -8,10 +8,9 @@ import (
 	"clodapp/backend/internal/usecase"
 )
 
-const (
-	projectNotFound = "проєкт не знайдено"
-	columnNotFound  = "колонку не знайдено"
-	ownerOnly       = "керувати колонками може лише власник проєкту"
+var (
+	projectNotFound = domain.ErrProjectNotFound
+	columnNotFound  = domain.ErrColumnNotFound
 )
 
 type ColumnService struct {
@@ -28,7 +27,7 @@ func NewColumnService(columns Columns, cards Cards, members Members, tx usecase.
 func validColumnName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || len(name) > 60 {
-		return "", domain.Validation("назва колонки обов'язкова (до 60 символів)")
+		return "", domain.ErrColumnName
 	}
 	return name, nil
 }
@@ -41,7 +40,7 @@ func (s *ColumnService) List(ctx context.Context, userID, projectID int64) ([]do
 }
 
 func (s *ColumnService) Create(ctx context.Context, userID, projectID int64, name string) ([]domain.Column, error) {
-	if err := usecase.RequireOwner(ctx, s.members, projectID, userID, projectNotFound, ownerOnly); err != nil {
+	if err := usecase.RequireOwner(ctx, s.members, projectID, userID, projectNotFound); err != nil {
 		return nil, err
 	}
 	name, err := validColumnName(name)
@@ -53,7 +52,7 @@ func (s *ColumnService) Create(ctx context.Context, userID, projectID int64, nam
 		return nil, err
 	}
 	if n >= domain.MaxColumnsPerProject {
-		return nil, domain.Validation("максимум 20 колонок у проєкті")
+		return nil, domain.ErrColumnLimit
 	}
 	if err := s.columns.Create(ctx, projectID, name); err != nil {
 		return nil, err
@@ -67,7 +66,7 @@ func (s *ColumnService) ownedColumn(ctx context.Context, userID, columnID int64)
 	if err != nil {
 		return col, usecase.NotFoundAs(err, columnNotFound)
 	}
-	return col, usecase.RequireOwner(ctx, s.members, col.ProjectID, userID, columnNotFound, ownerOnly)
+	return col, usecase.RequireOwner(ctx, s.members, col.ProjectID, userID, columnNotFound)
 }
 
 func (s *ColumnService) Rename(ctx context.Context, userID, columnID int64, name string) ([]domain.Column, error) {
@@ -122,7 +121,7 @@ func (s *ColumnService) Delete(ctx context.Context, userID, columnID int64, move
 		return nil, err
 	}
 	if n <= 1 {
-		return nil, domain.Validation("у проєкті має лишитися хоча б одна колонка")
+		return nil, domain.ErrLastColumn
 	}
 
 	err = s.tx.WithinTx(ctx, func(ctx context.Context) error {
@@ -136,11 +135,11 @@ func (s *ColumnService) Delete(ctx context.Context, userID, columnID int64, move
 		}
 		if col.CardCount > 0 {
 			if moveTo == nil || *moveTo == col.ID {
-				return domain.Conflict("у колонці є картки — вкажіть, куди їх перенести")
+				return domain.ErrColumnNotEmpty
 			}
 			target, err := s.columns.Get(ctx, *moveTo)
 			if err != nil || target.ProjectID != col.ProjectID {
-				return domain.Validation("колонку для перенесення не знайдено")
+				return domain.ErrMoveTarget
 			}
 			if err := s.columns.Lock(ctx, target.ID); err != nil {
 				return err

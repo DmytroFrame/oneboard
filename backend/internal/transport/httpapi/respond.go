@@ -19,8 +19,9 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]string{"error": msg})
+// writeError sends {"error": <English message>, "code": <stable code the client translates>}.
+func writeError(w http.ResponseWriter, status int, code, msg string) {
+	writeJSON(w, status, map[string]string{"error": msg, "code": code})
 }
 
 var statusByKind = map[domain.Kind]int{
@@ -34,18 +35,20 @@ var statusByKind = map[domain.Kind]int{
 
 // fail maps a use case error to a response; unexpected errors are logged and hidden from the client.
 func fail(w http.ResponseWriter, r *http.Request, err error) {
-	if status, ok := statusByKind[domain.KindOf(err)]; ok {
-		writeError(w, status, err.Error())
-		return
+	if e, ok := domain.AsError(err); ok {
+		if status, ok := statusByKind[e.Kind]; ok {
+			writeError(w, status, e.Code, e.Msg)
+			return
+		}
 	}
 	slog.ErrorContext(r.Context(), "internal error", "method", r.Method, "path", r.URL.Path, "err", err)
-	writeError(w, http.StatusInternalServerError, "внутрішня помилка сервера")
+	writeError(w, http.StatusInternalServerError, "internal", "Internal server error")
 }
 
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		writeError(w, http.StatusBadRequest, "некоректний JSON")
+		writeError(w, http.StatusBadRequest, "invalid_json", "Invalid JSON")
 		return false
 	}
 	return true
@@ -54,7 +57,7 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
 	id, err := strconv.ParseInt(chi.URLParam(r, name), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "некоректний id")
+		writeError(w, http.StatusBadRequest, "invalid_id", "Invalid id")
 		return 0, false
 	}
 	return id, true

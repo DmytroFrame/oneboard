@@ -41,7 +41,7 @@ func (h *AuthHandler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.mw.setSession(w, token)
-	writeJSON(w, http.StatusCreated, toUser(u))
+	writeJSON(w, http.StatusCreated, toMe(u))
 }
 
 func (h *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
@@ -55,7 +55,7 @@ func (h *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.mw.setSession(w, token)
-	writeJSON(w, http.StatusOK, toUser(u))
+	writeJSON(w, http.StatusOK, toMe(u))
 }
 
 func (h *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
@@ -70,5 +70,5 @@ func (h *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) me(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, toUser(currentUser(r)))
+	writeJSON(w, http.StatusOK, toMe(currentUser(r)))
 }

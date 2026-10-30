@@ -1,49 +1,60 @@
-import type { Card, CardFilters, CardInput, CardPage, Column, Member, Project, User } from "./types";
+import { i18n, translateError } from "./i18n";
+import type { Card, CardFilters, CardInput, CardPage, Column, CurrentUser, Member, Project, Settings, User } from "./types";
 
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public code?: string,
   ) {
     super(message);
   }
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`/api${path}`, {
-    method,
-    credentials: "same-origin",
-    headers: body !== undefined && !(body instanceof FormData) ? { "Content-Type": "application/json" } : undefined,
-    body: body instanceof FormData ? body : body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`/api${path}`, {
+      method,
+      credentials: "same-origin",
+      headers: body !== undefined && !(body instanceof FormData) ? { "Content-Type": "application/json" } : undefined,
+      body: body instanceof FormData ? body : body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new ApiError(0, i18n.t("errors.network"), "network");
+  }
   if (!res.ok) {
-    let message = `Помилка ${res.status}`;
+    // The server sends {error: English message, code}; show the translation of the code.
+    let message = i18n.t("errors.unknown", { status: res.status });
+    let code: string | undefined;
     try {
       const data = await res.json();
-      if (data?.error) message = data.error;
+      code = data?.code;
+      message = translateError(code, data?.error ?? message);
     } catch {
       // response has no JSON body
     }
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, code);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
 export const api = {
-  me: () => request<User>("GET", "/auth/me"),
-  login: (email: string, password: string) => request<User>("POST", "/auth/login", { email, password }),
+  me: () => request<CurrentUser>("GET", "/auth/me"),
+  login: (email: string, password: string) => request<CurrentUser>("POST", "/auth/login", { email, password }),
   register: (name: string, email: string, password: string) =>
-    request<User>("POST", "/auth/register", { name, email, password }),
+    request<CurrentUser>("POST", "/auth/register", { name, email, password }),
   logout: () => request<void>("POST", "/auth/logout"),
 
   users: () => request<User[]>("GET", "/users"),
   uploadAvatar: (image: Blob) => {
     const form = new FormData();
     form.append("avatar", image, "avatar");
-    return request<User>("PUT", "/users/me/avatar", form);
+    return request<CurrentUser>("PUT", "/users/me/avatar", form);
   },
-  removeAvatar: () => request<User>("DELETE", "/users/me/avatar"),
+  removeAvatar: () => request<CurrentUser>("DELETE", "/users/me/avatar"),
+  updateSettings: (settings: Settings) => request<CurrentUser>("PUT", "/users/me/settings", settings),
 
   projects: () => request<Project[]>("GET", "/projects"),
   createProject: (name: string, key: string) => request<Project>("POST", "/projects", { name, key }),

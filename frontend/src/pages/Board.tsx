@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
@@ -34,6 +35,7 @@ function useDebounced<T>(value: T, ms: number) {
 }
 
 function Board({ project }: { project: Project }) {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { reloadProjects } = useLayout();
   const navigate = useNavigate();
@@ -322,25 +324,25 @@ function Board({ project }: { project: Project }) {
     <div className="board">
       <div className="board-head">
         <div>
-          <div className="breadcrumbs">Проєкти / {project.name}</div>
-          <h1>Дошка {project.key}</h1>
+          <div className="breadcrumbs">{t("board.breadcrumbs", { name: project.name })}</div>
+          <h1>{t("board.title", { key: project.key })}</h1>
         </div>
         <div className="board-head-actions">
           <button className="btn btn-ghost" onClick={() => setSettingsOpen(true)}>
-            ⚙ Учасники та налаштування
+            {t("board.membersAndSettings")}
           </button>
           <button
             className="btn btn-primary"
             disabled={columns.length === 0}
             onClick={() => setModal({ card: null, columnId: columns[0]!.id })}
           >
-            + Створити
+            {t("board.create")}
           </button>
         </div>
       </div>
 
       <div className="toolbar">
-        <input className="search" placeholder="Пошук по дошці" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input className="search" placeholder={t("board.search")} value={search} onChange={(e) => setSearch(e.target.value)} />
 
         <div className="avatar-group">
           {orderedMembers.slice(0, VISIBLE_AVATARS).map((u) => (
@@ -351,13 +353,13 @@ function Board({ project }: { project: Project }) {
               className={`avatar avatar--clickable avatar--more${teamOpen ? " avatar--active" : ""}`}
               style={{ width: 32, height: 32 }}
               onClick={() => setTeamOpen((v) => !v)}
-              title="Усі учасники проєкту"
+              title={t("board.allMembers")}
             >
               {overflow > 0 ? `+${overflow}` : "☰"}
             </button>
             {teamOpen && (
               <div className="menu team-menu">
-                <div className="team-menu-title">Учасники · {members.length}</div>
+                <div className="team-menu-title">{t("board.members", { count: members.length })}</div>
                 {orderedMembers.map((u) => (
                   <label key={u.id} className="team-row">
                     <input type="checkbox" checked={selectedUsers.has(u.id)} onChange={() => toggleUser(u.id)} />
@@ -365,12 +367,12 @@ function Board({ project }: { project: Project }) {
                     <span className="team-row-name">
                       <span>
                         {u.name}
-                        {u.id === me.id && <em> (ви)</em>}
-                        {u.role === "owner" && <em> · власник</em>}
+                        {u.id === me.id && <em> {t("common.you")}</em>}
+                        {u.role === "owner" && <em> · {t("board.owner")}</em>}
                       </span>
                       <small>{u.email}</small>
                     </span>
-                    <span className="badge" title="Призначено задач">
+                    <span className="badge" title={t("board.assignedTasks")}>
                       {u.assignedCount}
                     </span>
                   </label>
@@ -378,7 +380,7 @@ function Board({ project }: { project: Project }) {
                 <label className="team-row">
                   <input type="checkbox" checked={showUnassigned} onChange={() => setShowUnassigned((v) => !v)} />
                   <Avatar user={null} size={28} />
-                  <span className="team-row-name">Не призначено</span>
+                  <span className="team-row-name">{t("common.unassigned")}</span>
                 </label>
                 {isOwner && (
                   <button
@@ -388,7 +390,7 @@ function Board({ project }: { project: Project }) {
                       setSettingsOpen(true);
                     }}
                   >
-                    + Додати людей
+                    {t("board.addPeople")}
                   </button>
                 )}
               </div>
@@ -400,13 +402,13 @@ function Board({ project }: { project: Project }) {
           className={`btn btn-sm ${onlyMine ? "btn-selected" : "btn-ghost"}`}
           onClick={() => setSelectedUsers(onlyMine ? new Set() : new Set([me.id]))}
         >
-          Тільки мої задачі
+          {t("board.onlyMine")}
         </button>
         {hasFilters && (
           <>
-            <span className="muted">Знайдено: {totalVisible}</span>
+            <span className="muted">{t("board.found", { count: totalVisible })}</span>
             <button className="btn btn-link btn-sm" onClick={clearFilters}>
-              Очистити фільтри
+              {t("board.clearFilters")}
             </button>
           </>
         )}
@@ -420,7 +422,7 @@ function Board({ project }: { project: Project }) {
 
       {booting ? (
         <div className="center">
-          <span className="spinner" /> Завантаження дошки…
+          <span className="spinner" /> {t("board.loading")}
         </div>
       ) : (
         <div className="columns">
