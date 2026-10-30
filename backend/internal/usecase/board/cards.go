@@ -15,7 +15,6 @@ const (
 	MaxPageSize     = 100
 	// maxSearchHits caps how many matches full-text search feeds into the database filter.
 	maxSearchHits = 10000
-
 )
 
 var cardNotFound = domain.ErrCardNotFound

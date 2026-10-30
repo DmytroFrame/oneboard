@@ -20,6 +20,7 @@ import (
 var Module = fx.Module("http",
 	fx.Provide(
 		NewMiddleware,
+		NewPresenter,
 		asRoutes(NewAuthHandler),
 		asRoutes(NewUserHandler),
 		asRoutes(NewProjectHandler),

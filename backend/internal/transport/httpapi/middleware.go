@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5/middleware"
@@ -13,7 +14,11 @@ import (
 	"clodapp/backend/internal/usecase/auth"
 )
 
-const sessionCookie = "session"
+// The refresh token cookie is scoped to /api/auth, so it is only ever sent to refresh and logout.
+const (
+	refreshCookie     = "refresh_token"
+	refreshCookiePath = "/api/auth"
+)
 
 type ctxKey struct{}
 
@@ -21,10 +26,11 @@ type Middleware struct {
 	auth          *auth.Service
 	log           *slog.Logger
 	secureCookies bool
+	refreshTTL    time.Duration
 }
 
 func NewMiddleware(a *auth.Service, log *slog.Logger, cfg config.Config) *Middleware {
-	return &Middleware{auth: a, log: log, secureCookies: cfg.SecureCookies}
+	return &Middleware{auth: a, log: log, secureCookies: cfg.SecureCookies, refreshTTL: cfg.RefreshTokenTTL}
 }
 
 // currentUser is set by RequireAuth.
@@ -33,14 +39,25 @@ func currentUser(r *http.Request) domain.User {
 	return u
 }
 
+// bearerToken extracts the token from "Authorization: Bearer <token>".
+func bearerToken(r *http.Request) string {
+	scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
+	if !ok || !strings.EqualFold(scheme, "Bearer") {
+		return ""
+	}
+	return strings.TrimSpace(token)
+}
+
+// RequireAuth accepts only a valid, unrevoked JWT access token in the Authorization header.
+// Cookies are deliberately ignored here, which also rules out CSRF on the API.
 func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c, err := r.Cookie(sessionCookie)
-		if err != nil {
+		token := bearerToken(r)
+		if token == "" {
 			fail(w, r, domain.ErrNotAuthenticated)
 			return
 		}
-		u, err := m.auth.Authenticate(r.Context(), c.Value)
+		u, err := m.auth.Authenticate(r.Context(), token)
 		if err != nil {
 			fail(w, r, err)
 			return
@@ -58,18 +75,30 @@ func (m *Middleware) Log(next http.Handler) http.Handler {
 	})
 }
 
-func (m *Middleware) setSession(w http.ResponseWriter, token string) {
+func (m *Middleware) setRefreshCookie(w http.ResponseWriter, token string) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookie,
+		Name:     refreshCookie,
 		Value:    token,
-		Path:     "/",
-		MaxAge:   int(auth.SessionTTL.Seconds()),
+		Path:     refreshCookiePath,
+		MaxAge:   int(m.refreshTTL.Seconds()),
 		HttpOnly: true,
 		Secure:   m.secureCookies,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 	})
 }
 
-func (m *Middleware) clearSession(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: m.secureCookies})
+func (m *Middleware) clearRefreshCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name: refreshCookie, Value: "", Path: refreshCookiePath, MaxAge: -1,
+		HttpOnly: true, Secure: m.secureCookies, SameSite: http.SameSiteStrictMode,
+	})
+	// Drop the cookie of the pre-JWT session auth, if the browser still has one.
+	http.SetCookie(w, &http.Cookie{Name: "session", Value: "", Path: "/", MaxAge: -1, HttpOnly: true})
+}
+
+func refreshTokenFrom(r *http.Request) string {
+	if c, err := r.Cookie(refreshCookie); err == nil {
+		return c.Value
+	}
+	return ""
 }

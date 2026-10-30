@@ -11,6 +11,7 @@ import (
 	"go.uber.org/fx/fxevent"
 
 	"clodapp/backend/internal/adapter/bcrypthash"
+	"clodapp/backend/internal/adapter/jwttoken"
 	"clodapp/backend/internal/adapter/postgres"
 	"clodapp/backend/internal/adapter/redisstore"
 	"clodapp/backend/internal/adapter/s3store"
@@ -40,6 +41,7 @@ func New() *fx.App {
 		searchindex.Module,
 		s3store.Module,
 		bcrypthash.Module,
+		jwttoken.Module,
 
 		// Use cases.
 		auth.Module,

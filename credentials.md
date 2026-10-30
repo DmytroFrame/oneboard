@@ -90,3 +90,18 @@ curl -k -u 'admin:Os-5nkp3vajorWQFIn7gRl9!' https://localhost:9200/_cluster/heal
 docker compose exec redpanda rpk topic create demo \
   -X user=flowboard -X pass=vfxpjWzVpj5YsOJvhG9n -X sasl.mechanism=SCRAM-SHA-256
 ```
+
+## JWT
+
+| Параметр | Значення |
+|---|---|
+| Секрет підпису (HS256) | `JWT_SECRET` у `.env` (64 випадкові символи) |
+| Access-токен | 15 хв (`ACCESS_TOKEN_TTL`) |
+| Refresh-токен | 30 днів (`REFRESH_TOKEN_TTL`), cookie `refresh_token` |
+
+Якщо змінити `JWT_SECRET`, усі сесії та посилання на аватарки стануть недійсними.
+
+```bash
+TOKEN=$(curl -s -X POST localhost:8080/api/auth/login -d '{"email":"demo@example.com","password":"demo1234"}' | jq -r .accessToken)
+curl -H "Authorization: Bearer $TOKEN" localhost:8080/api/projects
+```

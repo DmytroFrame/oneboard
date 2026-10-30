@@ -10,10 +10,11 @@ import (
 
 type ProjectHandler struct {
 	projects *project.Service
+	present  *Presenter
 }
 
-func NewProjectHandler(projects *project.Service) *ProjectHandler {
-	return &ProjectHandler{projects: projects}
+func NewProjectHandler(projects *project.Service, present *Presenter) *ProjectHandler {
+	return &ProjectHandler{projects: projects, present: present}
 }
 
 func (h *ProjectHandler) Mount(_, private chi.Router) {
@@ -92,7 +93,7 @@ func (h *ProjectHandler) members(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toMembers(ms))
+	writeJSON(w, http.StatusOK, h.present.Members(ms))
 }
 
 func (h *ProjectHandler) addMember(w http.ResponseWriter, r *http.Request) {
@@ -111,7 +112,7 @@ func (h *ProjectHandler) addMember(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toMembers(ms))
+	writeJSON(w, http.StatusOK, h.present.Members(ms))
 }
 
 func (h *ProjectHandler) removeMember(w http.ResponseWriter, r *http.Request) {

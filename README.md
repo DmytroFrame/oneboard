@@ -2,7 +2,7 @@
 
 ```
 backend/   Go, Clean Architecture: chi (HTTP), uber/fx (DI), PostgreSQL (pgx + goose),
-           Redis (сесії), OpenSearch (пошук карток), RustFS/S3 (аватарки)
+           JWT (golang-jwt) + Redis (refresh-токени), OpenSearch (пошук карток), RustFS/S3 (аватарки)
 frontend/  Vite + React + TypeScript + react-router + i18next: лендінг "/", вхід/реєстрація,
            проєкти "/projects/:id", налаштування "/settings"
 ```
@@ -17,13 +17,14 @@ backend/
   internal/
     domain/                    сутності (User, Project, Column, Card…) і бізнес-помилки; без залежностей
     usecase/                   бізнес-логіка; кожен пакет оголошує свої порти (інтерфейси)
-      auth/                      реєстрація, вхід, сесії
+      auth/                      реєстрація, вхід, JWT-сесії (access + refresh)
       user/                      користувачі, аватарки
       project/                   проєкти й учасники
       board/                     колонки, картки, пошук
     adapter/                   реалізації портів
       postgres/                  репозиторії, транзакції, міграції goose (migrations/*.sql), демо-дані
-      redisstore/                сесії: session:<sha256(token)> → userId з TTL
+      jwttoken/                  випуск і перевірка access-токенів (HS256)
+      redisstore/                refresh-токени з ротацією та denylist відкликаних access-токенів
       searchindex/               індекс карток в OpenSearch (edge n-gram, пошук за початком слова)
       s3store/                   аватарки в RustFS через AWS SDK v2
       bcrypthash/                хешування паролів
@@ -83,7 +84,7 @@ make infra-down     # docker compose down
   пошук (OpenSearch: ключ, назва, опис, за початком слова) і фільтри по людях виконуються на сервері
 - Аватарки: клік по своїй аватарці у верхній панелі → завантажити/змінити/видалити фото.
   Браузер обрізає фото до квадрата 256×256, сервер перевіряє тип (PNG/JPEG/WebP/GIF, до 5 МБ)
-  і зберігає його в RustFS. Віддається через `/api/users/{id}/avatar?v=…` з кешем «назавжди»
+  і зберігає його в RustFS. Віддається через підписаний URL `/api/users/{id}/avatar?v=…&sig=…` з кешем «назавжди»
 - Дизайн у стилі Liquid Glass (backdrop-filter, напівпрозорі шари) у світлій і темній темах
 - Інтерфейс трьома мовами: англійська, українська, німецька (`frontend/src/i18n/`, i18next).
   `en.ts` еталонний, і TypeScript вимагає, щоб `uk.ts` і `de.ts` мали всі ті самі ключі.
@@ -103,7 +104,9 @@ make infra-down     # docker compose down
 | `ADDR` | `:8080` | адреса сервера |
 | `STATIC_DIR` | `../frontend/dist` | зібраний фронтенд |
 | `SEED` | `1` | `0` — не створювати демо-дані в порожній базі |
-| `SECURE_COOKIES` | `0` | `1` за HTTPS |
+| `SECURE_COOKIES` | `0` | `1` за HTTPS (refresh-cookie з `Secure`) |
+| `JWT_SECRET` | — (обов'язкова, ≥ 32 символи) | ключ підпису JWT і URL аватарок; зміна завершує всі сесії |
+| `ACCESS_TOKEN_TTL`, `REFRESH_TOKEN_TTL` | `15m`, `720h` | час життя токенів |
 | `DATABASE_URL` | з `POSTGRES_USER/PASSWORD/DB` @ `localhost:5432` | PostgreSQL |
 | `REDIS_ADDR`, `REDIS_PASSWORD` | `localhost:6379`, з `.env` | Redis |
 | `OPENSEARCH_URL`, `OPENSEARCH_USER`, `OPENSEARCH_PASSWORD` | `https://localhost:9200`, `admin`, з `OPENSEARCH_ADMIN_PASSWORD` | OpenSearch |
@@ -111,18 +114,37 @@ make infra-down     # docker compose down
 | `S3_ENDPOINT`, `S3_REGION` | `http://localhost:9000`, `us-east-1` | RustFS |
 | `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` | з `RUSTFS_*` | бакет створюється автоматично |
 
+## Авторизація (JWT)
+
+- `login`, `register` і `refresh` повертають `{user, accessToken, expiresAt}` і ставлять cookie `refresh_token`
+  (`HttpOnly`, `SameSite=Strict`, `Path=/api/auth`, 30 днів).
+- **Access-токен** — JWT HS256 на 15 хвилин (`iss`, `aud`, `sub`, `exp`, `jti`). Фронтенд тримає його лише в
+  пам'яті й надсилає як `Authorization: Bearer …`. Решта API приймає тільки цей заголовок, cookie ігнорує,
+  тож CSRF для API неможливий.
+- **Refresh-токен** — випадковий рядок, у Redis зберігається лише його SHA-256. При кожному `/auth/refresh` він
+  міняється на новий. Якщо хтось пред'явить уже використаний токен, анулюється вся сесія (її «родина»).
+  Виняток — 30 секунд після ротації, щоб дві вкладки, що оновлюються одночасно, не розлогінили одна одну.
+- **Вихід** відкликає refresh-токен, а `jti` access-токена кладе в denylist у Redis до кінця його життя,
+  тому токен перестає діяти одразу.
+- Фронтенд оновлює токен сам: заздалегідь, коли до кінця лишається менше 30 секунд, або один раз після 401.
+  Паралельні запити чекають одне спільне оновлення. Після перезавантаження сторінки сесія відновлюється
+  через `/auth/refresh`.
+- Помилки: `token_expired` (час оновити токен), `token_invalid`, `session_invalid` (refresh-токен недійсний),
+  `not_authenticated`.
+
 ## API
 | Метод | Шлях | |
 |---|---|---|
 | POST | `/api/auth/register` | `{name, email, password}` |
 | POST | `/api/auth/login` | `{email, password}` |
-| POST | `/api/auth/logout` | |
+| POST | `/api/auth/refresh` | refresh-cookie → нова пара токенів (ротація) |
+| POST | `/api/auth/logout` | відкликає refresh-токен і, якщо надіслано, access-токен |
 | GET | `/api/auth/me` | поточний користувач разом із `settings: {language, theme}` |
 | GET | `/api/users` | усі зареєстровані користувачі (з `avatarUrl`) |
 | PUT | `/api/users/me/avatar` | `multipart/form-data`, поле `avatar` — PNG/JPEG/WebP/GIF до 5 МБ |
 | DELETE | `/api/users/me/avatar` | видалити свою аватарку |
 | PUT | `/api/users/me/settings` | `{language: auto\|en\|uk\|de, theme: auto\|light\|dark}` |
-| GET | `/api/users/{id}/avatar?v=` | зображення аватарки |
+| GET | `/api/users/{id}/avatar?v=&sig=` | зображення аватарки; без токена, доступ за підписом URL |
 | GET | `/api/projects` | проєкти поточного користувача |
 | POST | `/api/projects` | `{name, key}` — творець стає власником |
 | PUT | `/api/projects/{id}` | `{name}` — лише власник |

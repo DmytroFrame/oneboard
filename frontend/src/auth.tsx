@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, useLocation } from "react-router-dom";
-import { api } from "./api";
+import { api, setSessionLostHandler } from "./api";
 import { applySettings } from "./preferences";
 import type { CurrentUser } from "./types";
 
@@ -22,10 +22,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setSessionLostHandler(() => setUser(null)); // RequireAuth then redirects to the login page
     api
-      .me()
+      .restoreSession()
       .then(setUser)
-      .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
 

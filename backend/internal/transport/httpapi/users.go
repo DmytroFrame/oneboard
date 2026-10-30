@@ -13,19 +13,20 @@ import (
 )
 
 type UserHandler struct {
-	users *user.Service
+	users   *user.Service
+	present *Presenter
 }
 
-func NewUserHandler(users *user.Service) *UserHandler {
-	return &UserHandler{users: users}
+func NewUserHandler(users *user.Service, present *Presenter) *UserHandler {
+	return &UserHandler{users: users, present: present}
 }
 
-func (h *UserHandler) Mount(_, private chi.Router) {
+func (h *UserHandler) Mount(public, private chi.Router) {
 	private.Get("/users", h.list)
 	private.Put("/users/me/settings", h.updateSettings)
 	private.Put("/users/me/avatar", h.uploadAvatar)
 	private.Delete("/users/me/avatar", h.removeAvatar)
-	private.Get("/users/{id}/avatar", h.avatar)
+	public.Get("/users/{id}/avatar", h.avatar) // authorised by the URL signature, see Presenter
 }
 
 // list returns every registered user; used to pick people to add to a project.
@@ -35,7 +36,7 @@ func (h *UserHandler) list(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, mapSlice(users, toUser))
+	writeJSON(w, http.StatusOK, mapSlice(users, h.present.User))
 }
 
 // uploadAvatar accepts multipart/form-data with the image in the "avatar" field.
@@ -58,7 +59,7 @@ func (h *UserHandler) uploadAvatar(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toMe(u))
+	writeJSON(w, http.StatusOK, h.present.Me(u))
 }
 
 func (h *UserHandler) removeAvatar(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +68,7 @@ func (h *UserHandler) removeAvatar(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toMe(u))
+	writeJSON(w, http.StatusOK, h.present.Me(u))
 }
 
 func (h *UserHandler) updateSettings(w http.ResponseWriter, r *http.Request) {
@@ -80,13 +81,18 @@ func (h *UserHandler) updateSettings(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toMe(u))
+	writeJSON(w, http.StatusOK, h.present.Me(u))
 }
 
 // avatar streams the image from object storage. URLs carry ?v=<version>, so it is cached for good.
 func (h *UserHandler) avatar(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r, "id")
 	if !ok {
+		return
+	}
+	v, _ := strconv.ParseInt(r.URL.Query().Get("v"), 10, 64)
+	if !h.present.validAvatarSig(id, v, r.URL.Query().Get("sig")) {
+		fail(w, r, domain.ErrAvatarNotFound)
 		return
 	}
 	body, info, err := h.users.Avatar(r.Context(), id)

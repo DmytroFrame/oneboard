@@ -11,17 +11,76 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+interface SessionResponse {
+  user: CurrentUser;
+  accessToken: string;
+  expiresAt: string;
+}
+
+// ---------- JWT session ----------
+// The access token lives only in memory (never in storage, out of reach of other scripts' persistence);
+// the refresh token is an HttpOnly cookie scoped to /api/auth that JavaScript cannot read at all.
+
+let accessToken: string | null = null;
+let accessExpiresAt = 0;
+let refreshing: Promise<CurrentUser | null> | null = null;
+let onSessionLost: (() => void) | null = null;
+
+/** Called when the session can't be renewed any more (refresh token expired or revoked). */
+export function setSessionLostHandler(handler: () => void) {
+  onSessionLost = handler;
+}
+
+function setSession(s: SessionResponse | null) {
+  accessToken = s?.accessToken ?? null;
+  accessExpiresAt = s ? new Date(s.expiresAt).getTime() : 0;
+}
+
+/** Trades the refresh cookie for a new access token. Concurrent callers share one request. */
+function refreshSession(): Promise<CurrentUser | null> {
+  refreshing ??= (async () => {
+    try {
+      const res = await fetch("/api/auth/refresh", { method: "POST", credentials: "same-origin" });
+      if (!res.ok) {
+        setSession(null);
+        return null;
+      }
+      const s = (await res.json()) as SessionResponse;
+      setSession(s);
+      return s.user;
+    } catch {
+      return null; // network error: keep the current token, the request itself will report it
+    } finally {
+      refreshing = null;
+    }
+  })();
+  return refreshing;
+}
+
+const isAuthPath = (path: string) => path.startsWith("/auth/");
+
+async function request<T>(method: string, path: string, body?: unknown, retry = true): Promise<T> {
+  // Renew a token that is about to expire instead of sending it and waiting for a 401.
+  if (accessToken && !isAuthPath(path) && Date.now() > accessExpiresAt - 30_000) await refreshSession();
+
+  const headers: Record<string, string> = {};
+  if (body !== undefined && !(body instanceof FormData)) headers["Content-Type"] = "application/json";
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
   let res: Response;
   try {
     res = await fetch(`/api${path}`, {
       method,
       credentials: "same-origin",
-      headers: body !== undefined && !(body instanceof FormData) ? { "Content-Type": "application/json" } : undefined,
+      headers,
       body: body instanceof FormData ? body : body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
     throw new ApiError(0, i18n.t("errors.network"), "network");
+  }
+  if (res.status === 401 && retry && !isAuthPath(path)) {
+    if (await refreshSession()) return request<T>(method, path, body, false);
+    onSessionLost?.();
   }
   if (!res.ok) {
     // The server sends {error: English message, code}; show the translation of the code.
@@ -41,11 +100,26 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 export const api = {
+  /** Restores the session from the refresh cookie on page load; null when signed out. */
+  restoreSession: () => refreshSession(),
+  login: async (email: string, password: string) => {
+    const s = await request<SessionResponse>("POST", "/auth/login", { email, password });
+    setSession(s);
+    return s.user;
+  },
+  register: async (name: string, email: string, password: string) => {
+    const s = await request<SessionResponse>("POST", "/auth/register", { name, email, password });
+    setSession(s);
+    return s.user;
+  },
+  logout: async () => {
+    try {
+      await request<void>("POST", "/auth/logout");
+    } finally {
+      setSession(null);
+    }
+  },
   me: () => request<CurrentUser>("GET", "/auth/me"),
-  login: (email: string, password: string) => request<CurrentUser>("POST", "/auth/login", { email, password }),
-  register: (name: string, email: string, password: string) =>
-    request<CurrentUser>("POST", "/auth/register", { name, email, password }),
-  logout: () => request<void>("POST", "/auth/logout"),
 
   users: () => request<User[]>("GET", "/users"),
   uploadAvatar: (image: Blob) => {

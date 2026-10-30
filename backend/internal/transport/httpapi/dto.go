@@ -17,20 +17,6 @@ type userDTO struct {
 	AvatarURL *string `json:"avatarUrl"`
 }
 
-func toUser(u domain.User) userDTO {
-	d := userDTO{ID: u.ID, Name: u.Name, Email: u.Email, Color: u.Color}
-	if u.HasAvatar() {
-		// The version query changes on every upload, so the image can be cached forever.
-		var v int64
-		if u.AvatarUpdatedAt != nil {
-			v = u.AvatarUpdatedAt.UnixMilli()
-		}
-		url := fmt.Sprintf("/api/users/%d/avatar?v=%d", u.ID, v)
-		d.AvatarURL = &url
-	}
-	return d
-}
-
 type settingsDTO struct {
 	Language domain.Language `json:"language"`
 	Theme    domain.Theme    `json:"theme"`
@@ -40,10 +26,6 @@ type settingsDTO struct {
 type meDTO struct {
 	userDTO
 	Settings settingsDTO `json:"settings"`
-}
-
-func toMe(u domain.User) meDTO {
-	return meDTO{toUser(u), settingsDTO{u.Settings.Language, u.Settings.Theme}}
 }
 
 type memberDTO struct {
@@ -86,18 +68,17 @@ type cardDTO struct {
 	UpdatedAt   time.Time       `json:"updatedAt"`
 }
 
+// sessionDTO answers login, registration and refresh. The refresh token travels only in its HttpOnly cookie.
+type sessionDTO struct {
+	User        meDTO     `json:"user"`
+	AccessToken string    `json:"accessToken"`
+	ExpiresAt   time.Time `json:"expiresAt"`
+}
+
 type cardPageDTO struct {
 	Cards      []cardDTO `json:"cards"`
 	NextCursor *string   `json:"nextCursor"` // "position:id"; null when there are no more cards
 	Total      int       `json:"total"`
-}
-
-func toMembers(ms []domain.Member) []memberDTO {
-	out := make([]memberDTO, len(ms))
-	for i, m := range ms {
-		out[i] = memberDTO{toUser(m.User), m.Role, m.AssignedCount}
-	}
-	return out
 }
 
 func toProject(p domain.Project) projectDTO {

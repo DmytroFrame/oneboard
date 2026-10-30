@@ -3,9 +3,11 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 	"go.uber.org/fx"
@@ -18,6 +20,10 @@ type Config struct {
 	StaticDir     string
 	Seed          bool
 	SecureCookies bool
+
+	JWTSecret       []byte
+	AccessTokenTTL  time.Duration
+	RefreshTokenTTL time.Duration
 
 	DatabaseURL string
 
@@ -59,11 +65,28 @@ func Load() (Config, error) {
 		RawQuery: "sslmode=disable",
 	}
 
+	accessTTL, err := time.ParseDuration(env("ACCESS_TOKEN_TTL", "15m"))
+	if err != nil {
+		return Config{}, fmt.Errorf("ACCESS_TOKEN_TTL: %w", err)
+	}
+	refreshTTL, err := time.ParseDuration(env("REFRESH_TOKEN_TTL", "720h"))
+	if err != nil {
+		return Config{}, fmt.Errorf("REFRESH_TOKEN_TTL: %w", err)
+	}
+	secret := os.Getenv("JWT_SECRET")
+	if len(secret) < 32 {
+		return Config{}, errors.New("JWT_SECRET must be set to at least 32 characters (see .env)")
+	}
+
 	c := Config{
 		Addr:          env("ADDR", ":8080"),
 		StaticDir:     env("STATIC_DIR", "../frontend/dist"),
 		Seed:          env("SEED", "1") == "1",
 		SecureCookies: env("SECURE_COOKIES", "0") == "1",
+
+		JWTSecret:       []byte(secret),
+		AccessTokenTTL:  accessTTL,
+		RefreshTokenTTL: refreshTTL,
 
 		DatabaseURL: env("DATABASE_URL", pgURL.String()),
 
