@@ -4,6 +4,8 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, PublicOnly, RequireAuth } from "./auth";
 import { initI18n } from "./i18n";
 import { storedSettings } from "./preferences";
+import { initPWA } from "./pwa";
+import { initTouchDragAndDrop } from "./touch";
 import Landing from "./pages/Landing";
 import { Login, Register } from "./pages/AuthPages";
 import BoardRoute from "./pages/Board";
@@ -15,6 +17,8 @@ import "./styles.css";
 
 // Until the session is restored, use the language this browser used last time.
 initI18n(storedSettings().language);
+initPWA();
+initTouchDragAndDrop();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -43,6 +43,15 @@ export default function AppLayout() {
   pathRef.current = location.pathname;
   const projectsRef = useRef(projects);
   projectsRef.current = projects;
+  // Phones: the sidebar is a drawer, closed on every navigation.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  useEffect(() => setDrawerOpen(false), [location.pathname]);
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setDrawerOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drawerOpen]);
 
   const reload = useCallback(async () => {
     try {
@@ -57,6 +66,21 @@ export default function AppLayout() {
 
   useEffect(() => {
     reload();
+  }, [reload]);
+
+  const [online, setOnline] = useState(navigator.onLine);
+  useEffect(() => {
+    const on = () => {
+      setOnline(true);
+      void reload(); // whatever failed while offline
+    };
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
   }, [reload]);
 
   useEffect(() => {
@@ -107,8 +131,19 @@ export default function AppLayout() {
   };
 
   return (
-    <div className="app">
+    <div className={`app${drawerOpen ? " app--drawer" : ""}`}>
       <header className="topbar">
+        <button
+          type="button"
+          className="icon-btn menu-toggle"
+          aria-label={t("nav.menu")}
+          aria-expanded={drawerOpen}
+          onClick={() => setDrawerOpen((v) => !v)}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
         <Logo />
         <div className="spacer" />
         <div className="topbar-user">
@@ -120,7 +155,10 @@ export default function AppLayout() {
         </div>
       </header>
 
+      {!online && <div className="offline-bar">{t("pwa.offline")}</div>}
+
       <div className="app-body">
+        {drawerOpen && <div className="drawer-backdrop" onClick={() => setDrawerOpen(false)} />}
         <aside className="sidebar">
           <NavLink to="/home" className={linkClass("sidebar-settings")}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

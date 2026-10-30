@@ -1430,40 +1430,6 @@ button.add-column:hover {
   .modal-body {
     grid-template-columns: 1fr;
   }
-  .app {
-    padding: 8px;
-    gap: 8px;
-  }
-  .topbar-name {
-    display: none;
-  }
-  .app-body {
-    flex-direction: column;
-    gap: 8px;
-  }
-  .sidebar {
-    width: auto;
-    flex-direction: row;
-    align-items: center;
-    overflow-x: auto;
-    padding: 8px;
-    flex-shrink: 0;
-  }
-  .sidebar-title {
-    display: none;
-  }
-  .project-list {
-    flex-direction: row;
-  }
-  .project-link small {
-    display: none;
-  }
-  .sidebar-add {
-    margin-top: 0;
-  }
-  .column {
-    flex: 0 0 82vw;
-  }
 }
 
 /* ---------- language select (signed-out pages) ---------- */
@@ -2613,5 +2579,315 @@ button.add-column:hover {
   from {
     opacity: 0;
     transform: translate(-50%, -10px);
+  }
+}
+
+/* ---------- mobile & PWA ---------- */
+.menu-toggle,
+.drawer-backdrop {
+  display: none;
+}
+.offline-bar {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  color: #8a5300;
+  background: color-mix(in srgb, #ff9f0a 22%, var(--glass-strong));
+  border: 1px solid color-mix(in srgb, #ff9f0a 45%, transparent);
+}
+:root[data-theme="dark"] .offline-bar {
+  color: #ffd28a;
+}
+.install-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.install-card img {
+  border-radius: 14px;
+  flex-shrink: 0;
+  box-shadow: 0 6px 18px rgba(10, 132, 255, 0.3);
+}
+.install-text {
+  flex: 1;
+  min-width: 0;
+}
+.install-text h2 {
+  margin: 0 0 4px !important;
+}
+.install-text p {
+  margin: 0;
+  font-size: 14px;
+}
+/* The touch drag polyfill's moving card image. */
+.dnd-poly-drag-image {
+  opacity: 0.9 !important;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.3) !important;
+  transform-origin: center;
+}
+
+/* Standalone app (installed PWA): keep the content clear of the notch and home indicator. */
+@media (display-mode: standalone) {
+  .app {
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+}
+
+@media (max-width: 860px) {
+  .app {
+    height: 100dvh;
+    gap: 8px;
+    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom))
+      max(8px, env(safe-area-inset-left));
+  }
+  .topbar {
+    height: 52px;
+    padding: 0 8px;
+    gap: 6px;
+  }
+  .topbar .logo {
+    font-size: 17px;
+  }
+  .topbar-name {
+    display: none;
+  }
+  .menu-toggle {
+    display: inline-grid;
+  }
+
+  /* The sidebar becomes an off-canvas drawer. */
+  .app-body {
+    gap: 0;
+  }
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 120;
+    width: min(300px, 86vw);
+    border-radius: 0 var(--r-xl) var(--r-xl) 0;
+    padding: calc(16px + env(safe-area-inset-top)) 12px calc(16px + env(safe-area-inset-bottom))
+      calc(12px + env(safe-area-inset-left));
+    background: var(--glass-thick);
+    transform: translateX(-105%);
+    transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    visibility: hidden;
+  }
+  .app--drawer .sidebar {
+    transform: none;
+    visibility: visible;
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.35);
+  }
+  .drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 110;
+    background: var(--backdrop);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+    animation: fade 0.2s ease-out;
+  }
+  .app-main {
+    padding: 4px 0 0;
+  }
+
+  /* Board: one column per screen, swiped sideways with snapping. */
+  .board-head {
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .board-head h1 {
+    font-size: 22px;
+  }
+  .board-head-actions {
+    width: 100%;
+  }
+  .board-head-actions .btn {
+    flex: 1;
+  }
+  .toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .toolbar .search {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+  .columns {
+    scroll-snap-type: x mandatory;
+    gap: 10px;
+    padding: 2px 2px 8px;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Snapping would undo the small steps of edge auto-scroll while a card is dragged. */
+  .columns--dragging {
+    scroll-snap-type: none;
+  }
+  .column {
+    flex: 0 0 calc(100vw - 52px);
+    max-width: none;
+    scroll-snap-align: center;
+  }
+  .add-column {
+    flex: 0 0 calc(100vw - 52px);
+    scroll-snap-align: center;
+  }
+
+  /* Dialogs take the whole screen. */
+  .modal-backdrop {
+    padding: 0;
+    place-items: stretch;
+  }
+  .modal,
+  .modal--narrow {
+    max-width: none;
+    min-height: 100dvh;
+    border-radius: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--wall-base); /* full screen: nothing behind worth seeing through the glass */
+  }
+  .modal-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: calc(12px + env(safe-area-inset-top)) 14px 10px 16px;
+    background: var(--glass-menu);
+    -webkit-backdrop-filter: var(--blur-strong);
+    backdrop-filter: var(--blur-strong);
+  }
+  .modal-body {
+    padding: 8px 16px 16px;
+    gap: 16px;
+  }
+  .modal-content {
+    padding: 12px 16px 20px;
+  }
+  .modal-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    background: var(--glass-menu);
+    -webkit-backdrop-filter: var(--blur-strong);
+    backdrop-filter: var(--blur-strong);
+  }
+  .modal-peers-label {
+    display: none;
+  }
+  .title-input {
+    font-size: 20px;
+  }
+  .attachment-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* 16px inputs: iOS zooms into anything smaller on focus. */
+  input,
+  select,
+  textarea,
+  .md-editor-content {
+    font-size: 16px;
+  }
+
+  .home,
+  .org-page,
+  .settings-page {
+    padding: 4px 2px calc(24px + env(safe-area-inset-bottom));
+    gap: 14px;
+  }
+  .home-greeting {
+    font-size: 24px;
+  }
+  .stat {
+    padding: 12px 14px;
+  }
+  .stat-value {
+    font-size: 24px;
+  }
+  .org-head {
+    gap: 12px;
+  }
+  .org-badge--xl {
+    width: 44px;
+    height: 44px;
+    font-size: 20px;
+  }
+  .member-row {
+    flex-wrap: wrap;
+    padding: 10px;
+  }
+  .invite-form {
+    flex-wrap: wrap;
+  }
+  .invite-form input[type="email"] {
+    flex: 1 1 100%;
+  }
+  .install-card {
+    flex-wrap: wrap;
+  }
+  .toast {
+    top: calc(64px + env(safe-area-inset-top));
+  }
+
+  .landing-nav {
+    gap: 8px;
+    padding: 8px 8px 8px 14px;
+  }
+  .landing-nav nav {
+    gap: 6px;
+  }
+  .landing-nav .logo {
+    font-size: 0; /* the logo mark alone, so the controls fit on one line */
+    gap: 0;
+  }
+  .nav-get-started {
+    display: none; /* the hero's "Create account" is right below */
+  }
+  .hero {
+    grid-template-columns: minmax(0, 1fr); /* let the preview shrink instead of widening the page */
+    gap: 36px;
+    padding: 32px 20px 56px;
+  }
+  .hero p {
+    font-size: 17px;
+  }
+  .hero-preview {
+    gap: 6px;
+    padding: 10px;
+  }
+  .preview-col {
+    min-width: 0;
+    padding: 8px;
+    min-height: 170px;
+  }
+  .preview-card {
+    padding: 8px;
+    font-size: 12px;
+  }
+  .preview-dot {
+    flex: none;
+    width: 12px;
+    height: 12px;
+  }
+}
+
+/* Touch screens have no hover: show what desktop reveals on hover, and drop hover lifts. */
+@media (hover: none) {
+  .attachment-actions {
+    opacity: 1;
+  }
+  .card:hover,
+  .project-card:hover,
+  .option:hover,
+  .theme-option:hover {
+    transform: none;
+  }
+  .icon-btn,
+  .btn-sm {
+    min-height: 36px;
   }
 }

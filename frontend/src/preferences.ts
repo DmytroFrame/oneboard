@@ -45,9 +45,16 @@ const resolveTheme = (t: ThemePref) => (t === "auto" ? (media.matches ? "dark" :
 let snapshot: Snapshot = { settings: storedSettings(), resolvedTheme: resolveTheme(storedSettings().theme) };
 const listeners = new Set<() => void>();
 
+// Browser chrome / status bar colour (the PWA's title bar), matching the page background.
+const THEME_COLORS = { light: "#eef1f8", dark: "#0a0c14" };
+
 function publish(settings: Settings) {
   snapshot = { settings, resolvedTheme: resolveTheme(settings.theme) };
   document.documentElement.dataset.theme = snapshot.resolvedTheme;
+  document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((m) => {
+    // An explicit theme overrides the light/dark media variants from index.html.
+    m.content = settings.theme === "auto" ? THEME_COLORS[(m.media.includes("dark") ? "dark" : "light") as "light" | "dark"] : THEME_COLORS[snapshot.resolvedTheme];
+  });
   listeners.forEach((l) => l());
 }
 

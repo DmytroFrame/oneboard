@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { Avatar } from "../components/Avatar";
 import { detectLocale, LOCALES } from "../i18n";
 import { usePreferences } from "../preferences";
+import { isIOS, promptInstall, useInstallState } from "../pwa";
 import type { LanguagePref, ThemePref } from "../types";
 
 const AVATAR_SIZE = 256;
@@ -35,7 +36,29 @@ export default function SettingsPage() {
       </div>
       <ProfileSection />
       <PreferencesSection />
+      <InstallSection />
     </div>
+  );
+}
+
+/** Installing OneBoard as an app (PWA): a button where the browser allows it, instructions on iOS. */
+function InstallSection() {
+  const { t } = useTranslation();
+  const { canInstall, installed } = useInstallState();
+  if (!installed && !canInstall && !isIOS) return null; // browser can't install (or already offered elsewhere)
+  return (
+    <section className="settings-card install-card">
+      <img src="/pwa-192x192.png" alt="" width={56} height={56} />
+      <div className="install-text">
+        <h2>{t("pwa.title")}</h2>
+        <p className="muted">{installed ? t("pwa.installed") : isIOS && !canInstall ? t("pwa.iosHint") : t("pwa.text")}</p>
+      </div>
+      {canInstall && !installed && (
+        <button className="btn btn-primary" onClick={() => void promptInstall()}>
+          {t("pwa.install")}
+        </button>
+      )}
+    </section>
   );
 }
 

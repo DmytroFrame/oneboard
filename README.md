@@ -87,6 +87,13 @@ when someone signs up with that email.
 - **i18n:** `frontend/src/i18n/en.ts` is the source of truth; TypeScript requires `uk.ts` and `de.ts` to
   have exactly the same keys. The backend, logs and seed data are in English.
 - **Liquid Glass design** (translucent layers, `backdrop-filter`) in light and dark themes.
+- **Mobile and PWA.** Installable as an app (manifest, icons, a service worker via `vite-plugin-pwa`);
+  Settings shows an "Install" button, or instructions on iOS. On phones the sidebar becomes a drawer, the
+  board shows one column per screen with swipe snapping, dialogs go full screen, and cards are dragged with
+  a long press (the `mobile-drag-drop` polyfill; holding near an edge scrolls to the next column). The
+  app shell works offline: it opens with the last signed-in user, shows an "offline" bar and reloads data
+  when the connection is back. API calls are never cached. Icons are generated from
+  `frontend/public/logo.svg` with `npm run icons`.
 
 ## Backend architecture
 

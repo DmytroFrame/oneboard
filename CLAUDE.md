@@ -58,6 +58,7 @@ One WebSocket endpoint `/api/ws` (`transport/httpapi/realtime.go` hub + `usecase
 - `realtime.ts` (`BoardSocket`), `useBoardRealtime.ts` (peers; cursor moves go to a ref, not state), `cardDoc.ts` (Yjs provider over the board socket), `components/LiveCursors.tsx` (rAF loop).
 - `CardModal` (TipTap + Yjs, ~670 kB) is lazy-loaded from `Board.tsx`; keep heavy editor/CRDT imports out of the main bundle.
 - **i18n:** `src/i18n/en.ts` is the source of truth; `uk.ts`/`de.ts` are typed as `Translation`, so a missing key fails the build. Plural keys must define `_one/_few/_many/_other` in every locale. User settings (language/theme, `auto` allowed) are stored on the account and mirrored to localStorage for first paint.
+- **PWA / mobile:** `vite.config.ts` (`VitePWA`: manifest + Workbox precache; `/api` and health checks are excluded from the navigation fallback), `pwa.ts` (SW registration, install prompt), `touch.ts` (HTML5 DnD polyfill for touch + board-aware edge auto-scroll; drop targets must handle `dragenter` too). The Go SPA handler serves `sw.js`/`manifest.webmanifest`/`index.html` with `no-cache` and `/assets/*` as immutable. Mobile layout lives in the "mobile & PWA" section at the end of `styles.css` (≤860px, `hover: none`, `display-mode: standalone`).
 - Styling is a single `styles.css` with "liquid glass" design tokens on `:root` and dark-theme overrides; use the tokens (`--glass*`, `--panel-shadow`, `--accent`, …) rather than raw colors.
 
 ## Conventions

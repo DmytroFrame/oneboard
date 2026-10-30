@@ -192,6 +192,7 @@ export const en = {
     saved: "Saved",
   },
   nav: {
+    menu: "Menu",
     home: "Home",
     organizations: "Organizations",
     newOrganization: "+ New organization",
@@ -323,6 +324,14 @@ export const en = {
     online: "Online now",
     viewing: "{{name}} has this task open",
     editingTitle: "{{name}} is here too",
+  },
+  pwa: {
+    title: "OneBoard app",
+    text: "Install OneBoard to open it from your home screen or dock, full-screen and without the browser bar.",
+    install: "Install",
+    installed: "Installed — you are using the OneBoard app.",
+    iosHint: "In Safari, tap Share, then “Add to Home Screen”.",
+    offline: "You are offline — changes can’t be saved until the connection is back.",
   },
   errors: {
     token_expired: "Your session has expired, please sign in again",

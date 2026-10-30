@@ -86,6 +86,9 @@ export function BoardColumn(props: Props) {
     <section
       className={`column${dropBeforeId !== undefined ? " column--over" : ""}`}
       data-column-id={state.column.id}
+      // Accepting dragenter too (not just dragover) makes the column the drop target per the HTML5
+      // spec; desktop browsers are lenient, the touch drag polyfill is not.
+      onDragEnter={props.onDragOver}
       onDragOver={props.onDragOver}
       onDrop={props.onDrop}
     >

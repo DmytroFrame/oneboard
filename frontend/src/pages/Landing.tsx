@@ -38,7 +38,7 @@ export default function Landing() {
               <Link className="btn btn-ghost" to="/login">
                 {t("landing.signIn")}
               </Link>
-              <Link className="btn btn-primary" to="/register">
+              <Link className="btn btn-primary nav-get-started" to="/register">
                 {t("landing.getStarted")}
               </Link>
             </>

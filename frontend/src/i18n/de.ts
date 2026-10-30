@@ -191,6 +191,7 @@ export const de: Translation = {
     saved: "Gespeichert",
   },
   nav: {
+    menu: "Menü",
     home: "Startseite",
     organizations: "Organisationen",
     newOrganization: "+ Neue Organisation",
@@ -322,6 +323,14 @@ export const de: Translation = {
     online: "Gerade online",
     viewing: "{{name}} hat diese Aufgabe geöffnet",
     editingTitle: "{{name}} ist auch hier",
+  },
+  pwa: {
+    title: "OneBoard-App",
+    text: "Installiere OneBoard, um es vom Home-Bildschirm oder Dock zu öffnen – im Vollbild, ohne Browserleiste.",
+    install: "Installieren",
+    installed: "Installiert – du nutzt die OneBoard-App.",
+    iosHint: "Tippe in Safari auf „Teilen“ und dann auf „Zum Home-Bildschirm“.",
+    offline: "Du bist offline – Änderungen werden erst gespeichert, wenn die Verbindung zurück ist.",
   },
   errors: {
     token_expired: "Deine Sitzung ist abgelaufen, bitte melde dich erneut an",

@@ -191,6 +191,7 @@ export const uk: Translation = {
     saved: "Збережено",
   },
   nav: {
+    menu: "Меню",
     home: "Головна",
     organizations: "Організації",
     newOrganization: "+ Нова організація",
@@ -322,6 +323,14 @@ export const uk: Translation = {
     online: "Зараз онлайн",
     viewing: "{{name}} відкрив(ла) цю задачу",
     editingTitle: "{{name}} теж тут",
+  },
+  pwa: {
+    title: "Застосунок OneBoard",
+    text: "Встановіть OneBoard, щоб відкривати його з головного екрана або дока — на весь екран, без панелі браузера.",
+    install: "Встановити",
+    installed: "Встановлено — ви користуєтеся застосунком OneBoard.",
+    iosHint: "У Safari натисніть «Поділитися», а потім «На початковий екран».",
+    offline: "Немає з’єднання — зміни не збережуться, доки воно не відновиться.",
   },
   errors: {
     token_expired: "Сесія завершилася, увійдіть знову",

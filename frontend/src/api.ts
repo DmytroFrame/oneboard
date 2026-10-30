@@ -135,8 +135,25 @@ async function request<T>(method: string, path: string, body?: unknown, retry = 
 }
 
 export const api = {
-  /** Restores the session from the refresh cookie on page load; null when signed out. */
-  restoreSession: () => refreshSession(),
+  /**
+   * Restores the session from the refresh cookie on page load: the user, or null when signed out.
+   * Throws an ApiError with code "network" when the server can't be reached (offline start).
+   */
+  restoreSession: async (): Promise<CurrentUser | null> => {
+    let res: Response;
+    try {
+      res = await fetch("/api/auth/refresh", { method: "POST", credentials: "same-origin" });
+    } catch {
+      throw new ApiError(0, i18n.t("errors.network"), "network");
+    }
+    if (!res.ok) {
+      setSession(null);
+      return null;
+    }
+    const s = (await res.json()) as SessionResponse;
+    setSession(s);
+    return s.user;
+  },
   login: async (email: string, password: string) => {
     const s = await request<SessionResponse>("POST", "/auth/login", { email, password });
     setSession(s);

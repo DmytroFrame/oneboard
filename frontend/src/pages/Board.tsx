@@ -579,7 +579,7 @@ function Board({ project }: { project: Project }) {
           <span className="spinner" /> {t("board.loading")}
         </div>
       ) : (
-        <div className="columns">
+        <div className={`columns${draggingId !== null ? " columns--dragging" : ""}`}>
           {cols.map((s, i) => (
             <BoardColumn
               key={s.column.id}

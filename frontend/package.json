@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "icons": "pwa-assets-generator && ICONS=maskable pwa-assets-generator"
   },
   "dependencies": {
     "@tiptap/extension-collaboration": "^3.32.1",
@@ -19,6 +20,7 @@
     "@tiptap/starter-kit": "^3.32.1",
     "@tiptap/suggestion": "^3.32.1",
     "i18next": "^26.5.11",
+    "mobile-drag-drop": "^2.3.0-rc.2",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-i18next": "^17.1.9",
@@ -30,8 +32,11 @@
   "devDependencies": {
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@vite-pwa/assets-generator": "^2.0.0",
     "@vitejs/plugin-react": "^6.1.2",
     "typescript": "^7.0.2",
-    "vite": "^8.3.5"
+    "vite": "^8.3.5",
+    "vite-plugin-pwa": "^2.0.0",
+    "workbox-window": "^7.4.1"
   }
 }
