@@ -62,3 +62,11 @@ type SearchIndex interface {
 type Members interface {
 	usecase.Memberships
 }
+
+type AttachmentFiles interface {
+	KeysForCard(ctx context.Context, cardID int64) ([]string, error)
+}
+
+type FileStorage interface {
+	DeleteMany(ctx context.Context, keys []string) error
+}

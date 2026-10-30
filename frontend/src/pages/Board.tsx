@@ -7,8 +7,8 @@ import { Avatar } from "../components/Avatar";
 import { AddColumn, BoardColumn, type ColumnState } from "../components/BoardColumn";
 import { CardModal } from "../components/CardModal";
 import { ProjectSettingsModal } from "../components/ProjectModals";
-import type { Card, CardFilters, CardInput, Column, Member, Project } from "../types";
-import { rememberProject, useLayout } from "./AppLayout";
+import type { Attachment, Card, CardCover, CardFilters, CardInput, Column, Member, Project } from "../types";
+import { useLayout } from "./AppLayout";
 
 const VISIBLE_AVATARS = 6;
 const PAGE_SIZE = 20;
@@ -21,7 +21,7 @@ export default function BoardRoute() {
   const { projectId } = useParams();
   const { projects } = useLayout();
   const project = projects.find((p) => p.id === Number(projectId));
-  if (!project) return <Navigate to="/projects" replace />;
+  if (!project) return <Navigate to="/home" replace />;
   return <Board key={project.id} project={project} />;
 }
 
@@ -37,7 +37,7 @@ function useDebounced<T>(value: T, ms: number) {
 function Board({ project }: { project: Project }) {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const { reloadProjects } = useLayout();
+  const { reload: reloadProjects } = useLayout();
   const navigate = useNavigate();
   const me = user!;
   const isOwner = project.role === "owner";
@@ -127,7 +127,6 @@ function Board({ project }: { project: Project }) {
   }, [project.id]);
 
   useEffect(() => {
-    rememberProject(project.id);
     reloadMembers();
   }, [project.id, reloadMembers, user?.avatarUrl]);
 
@@ -308,6 +307,15 @@ function Board({ project }: { project: Project }) {
     reloadMembers();
   }
 
+  /** Keeps the card face (file count, cover) in sync with what the modal uploaded or deleted. */
+  function onAttachmentsChange(card: Card, attachments: Attachment[]) {
+    const media = attachments.find((a) => a.kind !== "file");
+    const cover: CardCover | null = media ? { kind: media.kind, url: media.kind === "image" ? (media.thumbUrl ?? media.url) : media.url } : null;
+    patchCol(card.columnId, (s) => ({
+      cards: s.cards.map((c) => (c.id === card.id ? { ...c, attachmentCount: attachments.length, cover } : c)),
+    }));
+  }
+
   async function deleteCard(card: Card) {
     await api.deleteCard(card.id);
     patchCol(card.columnId, (s) => ({ cards: s.cards.filter((c) => c.id !== card.id), total: s.total - 1 }));
@@ -461,6 +469,8 @@ function Board({ project }: { project: Project }) {
           users={orderedMembers}
           currentUser={me}
           canDelete={!!modal.card && (modal.card.authorId === me.id || isOwner)}
+          isProjectOwner={isOwner}
+          onAttachmentsChange={onAttachmentsChange}
           onClose={() => setModal(null)}
           onSave={saveCard}
           onDelete={deleteCard}
@@ -477,7 +487,7 @@ function Board({ project }: { project: Project }) {
           onProjectChanged={reloadProjects}
           onLeftOrDeleted={async () => {
             await reloadProjects();
-            navigate("/projects", { replace: true });
+            navigate("/home", { replace: true });
           }}
         />
       )}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
-import type { Member, Project, User } from "../types";
+import type { Member, Organization, OrgMember, Project } from "../types";
 import { Avatar } from "./Avatar";
 
 export function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
@@ -34,8 +34,57 @@ function suggestKey(name: string) {
   return key.slice(0, 10);
 }
 
-export function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: Project) => Promise<void> }) {
+export function CreateOrgModal({ onClose, onCreated }: { onClose: () => void; onCreated: (o: Organization) => Promise<void> }) {
   const { t } = useTranslation();
+  const [name, setName] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await onCreated(await api.createOrganization(name));
+      onClose();
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={t("org.newTitle")} onClose={onClose}>
+      <form className="form modal-content" onSubmit={submit}>
+        <label>
+          {t("common.name")}
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("org.namePlaceholder")} maxLength={100} required autoFocus />
+        </label>
+        <p className="muted">{t("org.rolesHint")}</p>
+        {error && <div className="form-error">{error}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            {t("common.cancel")}
+          </button>
+          <button className="btn btn-primary" disabled={busy}>
+            {t("common.create")}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+interface CreateProjectProps {
+  orgs: Organization[]; // organizations where the user may create projects
+  defaultOrgId?: number;
+  onClose: () => void;
+  onCreated: (p: Project) => Promise<void>;
+}
+
+export function CreateProjectModal({ orgs, defaultOrgId, onClose, onCreated }: CreateProjectProps) {
+  const { t } = useTranslation();
+  const [orgId, setOrgId] = useState(defaultOrgId ?? orgs[0]?.id ?? 0);
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
   const [keyTouched, setKeyTouched] = useState(false);
@@ -47,7 +96,7 @@ export function CreateProjectModal({ onClose, onCreated }: { onClose: () => void
     setBusy(true);
     setError("");
     try {
-      const p = await api.createProject(name, key);
+      const p = await api.createProject(orgId, name, key);
       await onCreated(p);
       onClose();
     } catch (err) {
@@ -59,6 +108,17 @@ export function CreateProjectModal({ onClose, onCreated }: { onClose: () => void
   return (
     <Modal title={t("project.newTitle")} onClose={onClose}>
       <form className="form modal-content" onSubmit={submit}>
+        {orgs.length === 0 && <p className="muted">{t("projectExtra.noOrgToCreate")}</p>}
+        <label>
+          {t("projectExtra.organization")}
+          <select value={orgId} onChange={(e) => setOrgId(Number(e.target.value))} required>
+            {orgs.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <label>
           {t("common.name")}
           <input
@@ -94,7 +154,7 @@ export function CreateProjectModal({ onClose, onCreated }: { onClose: () => void
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             {t("common.cancel")}
           </button>
-          <button className="btn btn-primary" disabled={busy}>
+          <button className="btn btn-primary" disabled={busy || orgs.length === 0}>
             {t("common.create")}
           </button>
         </div>
@@ -124,23 +184,24 @@ export function ProjectSettingsModal({
 }: SettingsProps) {
   const { t } = useTranslation();
   const isOwner = project.role === "owner";
-  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [orgMembers, setOrgMembers] = useState<OrgMember[] | null>(null);
   const [query, setQuery] = useState("");
   const [name, setName] = useState(project.name);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (isOwner) api.users().then(setAllUsers).catch((err) => setError(err.message));
-  }, [isOwner]);
+    // Only people from the project's organization can join it.
+    if (isOwner) api.orgMembers(project.organizationId).then(setOrgMembers).catch((err) => setError(err.message));
+  }, [isOwner, project.organizationId]);
 
   const candidates = useMemo(() => {
     const memberIds = new Set(members.map((m) => m.id));
     const q = query.trim().toLowerCase();
-    return allUsers
+    return (orgMembers ?? [])
       .filter((u) => !memberIds.has(u.id))
       .filter((u) => !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
-  }, [allUsers, members, query]);
+  }, [orgMembers, members, query]);
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -154,7 +215,7 @@ export function ProjectSettingsModal({
     }
   }
 
-  const add = (u: User) => run(async () => onMembersChanged(await api.addMember(project.id, u.id)));
+  const add = (u: OrgMember) => run(async () => onMembersChanged(await api.addMember(project.id, u.id)));
 
   const remove = (m: Member) =>
     run(async () => {
@@ -238,7 +299,7 @@ export function ProjectSettingsModal({
             <div className="member-list member-list--scroll">
               {candidates.length === 0 && (
                 <div className="muted">
-                  {allUsers.length === 0 ? t("common.loading") : t("project.noCandidates")}
+                  {orgMembers === null ? t("common.loading") : t("project.noCandidates")}
                 </div>
               )}
               {candidates.map((u) => (
@@ -254,7 +315,7 @@ export function ProjectSettingsModal({
                 </div>
               ))}
             </div>
-            <p className="muted">{t("project.mustRegister")}</p>
+            <p className="muted">{t("projectExtra.mustBeOrgMember", { org: project.organizationName })}</p>
           </section>
         )}
 

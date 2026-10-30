@@ -13,11 +13,12 @@ import (
 )
 
 type CardHandler struct {
-	cards *board.CardService
+	cards   *board.CardService
+	present *Presenter
 }
 
-func NewCardHandler(cards *board.CardService) *CardHandler {
-	return &CardHandler{cards: cards}
+func NewCardHandler(cards *board.CardService, present *Presenter) *CardHandler {
+	return &CardHandler{cards: cards, present: present}
 }
 
 func (h *CardHandler) Mount(_, private chi.Router) {
@@ -72,7 +73,7 @@ func (h *CardHandler) list(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toCardPage(page))
+	writeJSON(w, http.StatusOK, h.present.CardPage(page))
 }
 
 type cardInput struct {
@@ -101,7 +102,7 @@ func (h *CardHandler) create(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, toCard(c))
+	writeJSON(w, http.StatusCreated, h.present.Card(c))
 }
 
 func (h *CardHandler) update(w http.ResponseWriter, r *http.Request) {
@@ -118,7 +119,7 @@ func (h *CardHandler) update(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toCard(c))
+	writeJSON(w, http.StatusOK, h.present.Card(c))
 }
 
 func (h *CardHandler) move(w http.ResponseWriter, r *http.Request) {
@@ -139,7 +140,7 @@ func (h *CardHandler) move(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toCard(c))
+	writeJSON(w, http.StatusOK, h.present.Card(c))
 }
 
 func (h *CardHandler) delete(w http.ResponseWriter, r *http.Request) {

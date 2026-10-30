@@ -23,7 +23,7 @@ var notFound = domain.ErrProjectNotFound
 type Projects interface {
 	ListForUser(ctx context.Context, userID int64) ([]domain.Project, error)
 	GetForUser(ctx context.Context, projectID, userID int64) (domain.Project, error)
-	Create(ctx context.Context, name, key string, ownerID int64) (int64, error) // domain.ErrDuplicate on a taken key
+	Create(ctx context.Context, orgID int64, name, key string, ownerID int64) (int64, error) // domain.ErrDuplicate on a taken key
 	Rename(ctx context.Context, projectID int64, name string) error
 	Delete(ctx context.Context, projectID int64) error
 }
@@ -43,8 +43,17 @@ type Cards interface {
 	UnassignUser(ctx context.Context, projectID, userID int64) error
 }
 
-type Users interface {
-	ByID(ctx context.Context, id int64) (domain.User, error)
+// OrgRoles answers "what is this user's role in this organization".
+type OrgRoles interface {
+	Role(ctx context.Context, orgID, userID int64) (domain.OrgRole, error)
+}
+
+type AttachmentFiles interface {
+	KeysForProjects(ctx context.Context, projectIDs []int64) ([]string, error)
+}
+
+type FileStorage interface {
+	DeleteMany(ctx context.Context, keys []string) error
 }
 
 type SearchIndex interface {
@@ -56,8 +65,10 @@ type Service struct {
 	members  Members
 	columns  Columns
 	cards    Cards
-	users    Users
+	orgs     OrgRoles
 	index    SearchIndex
+	files    AttachmentFiles
+	storage  FileStorage
 	tx       usecase.Transactor
 	log      *slog.Logger
 }
@@ -68,14 +79,16 @@ type Deps struct {
 	Members  Members
 	Columns  Columns
 	Cards    Cards
-	Users    Users
+	Orgs     OrgRoles
 	Index    SearchIndex
+	Files    AttachmentFiles
+	Storage  FileStorage
 	Tx       usecase.Transactor
 	Log      *slog.Logger
 }
 
 func NewService(d Deps) *Service {
-	return &Service{d.Projects, d.Members, d.Columns, d.Cards, d.Users, d.Index, d.Tx, d.Log}
+	return &Service{d.Projects, d.Members, d.Columns, d.Cards, d.Orgs, d.Index, d.Files, d.Storage, d.Tx, d.Log}
 }
 
 func (s *Service) List(ctx context.Context, userID int64) ([]domain.Project, error) {
@@ -90,9 +103,20 @@ func validName(name string) (string, error) {
 	return name, nil
 }
 
-// Create makes a project with the default columns, owned by userID.
-func (s *Service) Create(ctx context.Context, userID int64, name, key string) (domain.Project, error) {
-	name, err := validName(name)
+// Create makes a project in an organization, with the default columns, owned by userID.
+// Organization owners and admins can create projects.
+func (s *Service) Create(ctx context.Context, userID, orgID int64, name, key string) (domain.Project, error) {
+	orgRole, err := s.orgs.Role(ctx, orgID, userID)
+	if err != nil {
+		return domain.Project{}, err
+	}
+	if orgRole == domain.OrgRoleNone {
+		return domain.Project{}, domain.ErrOrgNotFound
+	}
+	if !orgRole.CanCreateProjects() {
+		return domain.Project{}, domain.ErrOrgAdminOnly
+	}
+	name, err = validName(name)
 	if err != nil {
 		return domain.Project{}, err
 	}
@@ -103,7 +127,7 @@ func (s *Service) Create(ctx context.Context, userID int64, name, key string) (d
 
 	var id int64
 	err = s.tx.WithinTx(ctx, func(ctx context.Context) error {
-		if id, err = s.projects.Create(ctx, name, key, userID); err != nil {
+		if id, err = s.projects.Create(ctx, orgID, name, key, userID); err != nil {
 			return err
 		}
 		if err := s.members.Add(ctx, id, userID, domain.RoleOwner); err != nil {
@@ -138,11 +162,18 @@ func (s *Service) Delete(ctx context.Context, userID, projectID int64) error {
 	if err := usecase.RequireOwner(ctx, s.members, projectID, userID, notFound); err != nil {
 		return err
 	}
+	keys, err := s.files.KeysForProjects(ctx, []int64{projectID})
+	if err != nil {
+		return err
+	}
 	if err := s.projects.Delete(ctx, projectID); err != nil {
 		return err
 	}
 	if err := s.index.DeleteProject(ctx, projectID); err != nil {
 		s.log.Error("search index: delete project", "project", projectID, "err", err)
+	}
+	if err := s.storage.DeleteMany(ctx, keys); err != nil {
+		s.log.Error("storage: delete project files", "project", projectID, "err", err)
 	}
 	return nil
 }
@@ -158,11 +189,17 @@ func (s *Service) AddMember(ctx context.Context, userID, projectID, targetID int
 	if err := usecase.RequireOwner(ctx, s.members, projectID, userID, notFound); err != nil {
 		return nil, err
 	}
-	if _, err := s.users.ByID(ctx, targetID); err != nil {
-		if errors.Is(err, domain.ErrNoRows) {
-			return nil, domain.ErrUnknownUser
-		}
+	p, err := s.projects.GetForUser(ctx, projectID, userID)
+	if err != nil {
 		return nil, err
+	}
+	// Only people from the project's organization can join it.
+	orgRole, err := s.orgs.Role(ctx, p.OrgID, targetID)
+	if err != nil {
+		return nil, err
+	}
+	if orgRole == domain.OrgRoleNone {
+		return nil, domain.ErrNotInOrg
 	}
 	if err := s.members.Add(ctx, projectID, targetID, domain.RoleMember); err != nil {
 		if errors.Is(err, domain.ErrDuplicate) {

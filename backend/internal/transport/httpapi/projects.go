@@ -28,8 +28,9 @@ func (h *ProjectHandler) Mount(_, private chi.Router) {
 }
 
 type projectInput struct {
-	Name string `json:"name"`
-	Key  string `json:"key"`
+	OrganizationID int64  `json:"organizationId"` // create only
+	Name           string `json:"name"`
+	Key            string `json:"key"`
 }
 
 func (h *ProjectHandler) list(w http.ResponseWriter, r *http.Request) {
@@ -46,7 +47,7 @@ func (h *ProjectHandler) create(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	p, err := h.projects.Create(r.Context(), currentUser(r).ID, in.Name, in.Key)
+	p, err := h.projects.Create(r.Context(), currentUser(r).ID, in.OrganizationID, in.Name, in.Key)
 	if err != nil {
 		fail(w, r, err)
 		return

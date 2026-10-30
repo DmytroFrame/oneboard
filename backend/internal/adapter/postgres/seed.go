@@ -10,16 +10,20 @@ import (
 
 // Seeder fills an empty database with demo users, projects and cards so the app isn't blank on first run.
 type Seeder struct {
-	db       *DB
-	users    *UserRepo
-	projects *ProjectRepo
-	columns  *ColumnRepo
-	cards    *CardRepo
-	hasher   auth.PasswordHasher
+	db          *DB
+	users       *UserRepo
+	orgs        *OrgRepo
+	orgMembers  *OrgMemberRepo
+	invitations *InvitationRepo
+	projects    *ProjectRepo
+	columns     *ColumnRepo
+	cards       *CardRepo
+	hasher      auth.PasswordHasher
 }
 
-func NewSeeder(db *DB, users *UserRepo, projects *ProjectRepo, columns *ColumnRepo, cards *CardRepo, hasher auth.PasswordHasher) *Seeder {
-	return &Seeder{db, users, projects, columns, cards, hasher}
+func NewSeeder(db *DB, users *UserRepo, orgs *OrgRepo, orgMembers *OrgMemberRepo, invitations *InvitationRepo,
+	projects *ProjectRepo, columns *ColumnRepo, cards *CardRepo, hasher auth.PasswordHasher) *Seeder {
+	return &Seeder{db, users, orgs, orgMembers, invitations, projects, columns, cards, hasher}
 }
 
 func (s *Seeder) Seed(ctx context.Context) (bool, error) {
@@ -51,6 +55,30 @@ func (s *Seeder) seed(ctx context.Context) error {
 		uid[i] = u.ID
 	}
 
+	// Two organizations, so the demo user sees both an owner's and an admin's view.
+	// Taras is in none of them — handy for trying out invitations.
+	orgs := []struct {
+		name    string
+		members map[int]domain.OrgRole // index into uid → role
+	}{
+		{"Flowboard Inc.", map[int]domain.OrgRole{0: domain.OrgRoleOwner, 1: domain.OrgRoleAdmin, 2: domain.OrgRoleMember, 3: domain.OrgRoleMember}},
+		{"Mobile Studio", map[int]domain.OrgRole{1: domain.OrgRoleOwner, 0: domain.OrgRoleAdmin}},
+	}
+	orgID := make([]int64, len(orgs))
+	for i, o := range orgs {
+		if orgID[i], err = s.orgs.Create(ctx, o.name, uid[0]); err != nil {
+			return err
+		}
+		for m, role := range o.members {
+			if err := s.orgMembers.Add(ctx, orgID[i], uid[m], role); err != nil {
+				return err
+			}
+		}
+	}
+	if err := s.invitations.Create(ctx, orgID[0], "new.hire@example.com", domain.OrgRoleMember, uid[0]); err != nil {
+		return err
+	}
+
 	type card struct {
 		title, desc      string
 		priority         domain.Priority
@@ -58,12 +86,13 @@ func (s *Seeder) seed(ctx context.Context) error {
 		author, assignee int // indexes into uid; assignee -1 = unassigned
 	}
 	projects := []struct {
+		org       int // index into orgID
 		name, key string
 		members   []int
 		cards     []card
 		backlog   int // extra generated cards in the first column, to demo infinite scroll
 	}{
-		{"Flowboard", "KAN", []int{1, 2, 3}, []card{
+		{0, "Flowboard", "KAN", []int{1, 2, 3}, []card{
 			{"Set up CI/CD", "GitHub Actions: lint, tests, Docker image build.", "high", 0, 0, 2},
 			{"Profile page design", "Figma mockups for desktop and mobile.", "medium", 0, 1, 3},
 			{"Add task search", "Full-text search with OpenSearch.", "low", 0, 2, -1},
@@ -73,7 +102,7 @@ func (s *Seeder) seed(ctx context.Context) error {
 			{"Fix login bug", "Session is lost after a page reload.", "critical", 3, 1, 0},
 			{"Landing page", "", "low", 3, 3, 3},
 		}, 45},
-		{"Mobile App", "MOB", []int{1}, []card{
+		{1, "Mobile App", "MOB", []int{1}, []card{
 			{"Sign-in screen", "", "high", 0, 0, 1},
 			{"Push notifications", "Firebase Cloud Messaging.", "medium", 1, 1, 0},
 			{"Dark theme", "", "low", 3, 0, 1},
@@ -82,7 +111,7 @@ func (s *Seeder) seed(ctx context.Context) error {
 
 	priorities := []domain.Priority{domain.PriorityLow, domain.PriorityMedium, domain.PriorityHigh, domain.PriorityCritical}
 	for _, p := range projects {
-		pid, err := s.projects.Create(ctx, p.name, p.key, uid[0])
+		pid, err := s.projects.Create(ctx, orgID[p.org], p.name, p.key, uid[0])
 		if err != nil {
 			return err
 		}

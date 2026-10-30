@@ -2,6 +2,7 @@
 package user
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -31,7 +32,6 @@ var avatarTypes = map[string]string{
 }
 
 type Users interface {
-	List(ctx context.Context) ([]domain.User, error)
 	ByID(ctx context.Context, id int64) (domain.User, error)
 	// SetAvatar stores the new key (or "" to clear) and returns the previous one.
 	SetAvatar(ctx context.Context, userID int64, key string, at time.Time) (oldKey string, err error)
@@ -44,7 +44,7 @@ type ObjectInfo struct {
 }
 
 type AvatarStorage interface {
-	Put(ctx context.Context, key, contentType string, data []byte) error
+	Put(ctx context.Context, key, contentType string, body io.ReadSeeker, size int64) error
 	Get(ctx context.Context, key string) (io.ReadCloser, ObjectInfo, error) // domain.ErrNoRows if missing
 	Delete(ctx context.Context, key string) error
 }
@@ -57,10 +57,6 @@ type Service struct {
 
 func NewService(users Users, storage AvatarStorage, log *slog.Logger) *Service {
 	return &Service{users: users, storage: storage, log: log}
-}
-
-func (s *Service) List(ctx context.Context) ([]domain.User, error) {
-	return s.users.List(ctx)
 }
 
 // UploadAvatar validates the image, stores it under a fresh key and replaces the user's previous avatar.
@@ -87,7 +83,7 @@ func (s *Service) UploadAvatar(ctx context.Context, userID int64, r io.Reader) (
 		return domain.User{}, err
 	}
 	key := fmt.Sprintf("avatars/%d/%s.%s", userID, hex.EncodeToString(suffix), ext)
-	if err := s.storage.Put(ctx, key, contentType, data); err != nil {
+	if err := s.storage.Put(ctx, key, contentType, bytes.NewReader(data), int64(len(data))); err != nil {
 		return domain.User{}, fmt.Errorf("store avatar: %w", err)
 	}
 	return s.replaceAvatar(ctx, userID, key)

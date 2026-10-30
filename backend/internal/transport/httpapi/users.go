@@ -22,21 +22,10 @@ func NewUserHandler(users *user.Service, present *Presenter) *UserHandler {
 }
 
 func (h *UserHandler) Mount(public, private chi.Router) {
-	private.Get("/users", h.list)
 	private.Put("/users/me/settings", h.updateSettings)
 	private.Put("/users/me/avatar", h.uploadAvatar)
 	private.Delete("/users/me/avatar", h.removeAvatar)
 	public.Get("/users/{id}/avatar", h.avatar) // authorised by the URL signature, see Presenter
-}
-
-// list returns every registered user; used to pick people to add to a project.
-func (h *UserHandler) list(w http.ResponseWriter, r *http.Request) {
-	users, err := h.users.List(r.Context())
-	if err != nil {
-		fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, mapSlice(users, h.present.User))
 }
 
 // uploadAvatar accepts multipart/form-data with the image in the "avatar" field.

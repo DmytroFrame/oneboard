@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"strings"
 
+	"go.uber.org/fx"
+
 	"clodapp/backend/internal/domain"
 	"clodapp/backend/internal/usecase"
 )
@@ -24,12 +26,26 @@ type CardService struct {
 	columns Columns
 	members Members
 	index   SearchIndex
+	files   AttachmentFiles
+	storage FileStorage
 	tx      usecase.Transactor
 	log     *slog.Logger
 }
 
-func NewCardService(cards Cards, columns Columns, members Members, index SearchIndex, tx usecase.Transactor, log *slog.Logger) *CardService {
-	return &CardService{cards: cards, columns: columns, members: members, index: index, tx: tx, log: log}
+type CardDeps struct {
+	fx.In
+	Cards   Cards
+	Columns Columns
+	Members Members
+	Index   SearchIndex
+	Files   AttachmentFiles
+	Storage FileStorage
+	Tx      usecase.Transactor
+	Log     *slog.Logger
+}
+
+func NewCardService(d CardDeps) *CardService {
+	return &CardService{cards: d.Cards, columns: d.Columns, members: d.Members, index: d.Index, files: d.Files, storage: d.Storage, tx: d.Tx, log: d.Log}
 }
 
 type ListQuery struct {
@@ -217,11 +233,18 @@ func (s *CardService) Delete(ctx context.Context, userID, cardID int64) error {
 	if c.AuthorID != userID && role != domain.RoleOwner {
 		return domain.ErrCardDeleteDenied
 	}
+	keys, err := s.files.KeysForCard(ctx, c.ID)
+	if err != nil {
+		return err
+	}
 	if err := s.cards.Delete(ctx, c.ID); err != nil {
 		return err
 	}
 	if err := s.index.Delete(ctx, c.ID); err != nil {
 		s.log.Error("search index: delete card", "card", c.ID, "err", err)
+	}
+	if err := s.storage.DeleteMany(ctx, keys); err != nil {
+		s.log.Error("storage: delete card files", "card", c.ID, "err", err)
 	}
 	return nil
 }

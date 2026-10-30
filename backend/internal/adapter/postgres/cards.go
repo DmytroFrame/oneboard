@@ -15,16 +15,36 @@ type CardRepo struct{ db *DB }
 
 func NewCardRepo(db *DB) *CardRepo { return &CardRepo{db: db} }
 
-const cardSelect = `
-	SELECT c.id, c.project_id, c.column_id, p.key || '-' || c.number, c.title, c.description, c.priority,
-		c.position, c.author_id, c.assignee_id, c.created_at, c.updated_at
-	FROM cards c JOIN projects p ON p.id = c.project_id`
+// cardColumns + cardJoins select a card with its attachment count and cover (first image or video).
+const cardColumns = `
+	c.id, c.project_id, c.column_id, p.key || '-' || c.number, c.title, c.description, c.priority,
+	c.position, c.author_id, c.assignee_id, c.created_at, c.updated_at,
+	(SELECT COUNT(*) FROM card_attachments a WHERE a.card_id = c.id), cov.id, cov.kind, cov.thumb_key IS NOT NULL`
 
-func scanCard(row pgx.Row) (domain.Card, error) {
+const cardJoins = `
+	FROM cards c JOIN projects p ON p.id = c.project_id
+	LEFT JOIN LATERAL (
+		SELECT a.id, a.kind, a.thumb_key FROM card_attachments a
+		WHERE a.card_id = c.id AND a.kind IN ('image', 'video') ORDER BY a.id LIMIT 1
+	) cov ON true`
+
+const cardSelect = `SELECT ` + cardColumns + cardJoins
+
+func scanCard(row pgx.Row, extra ...any) (domain.Card, error) {
 	var c domain.Card
-	err := row.Scan(&c.ID, &c.ProjectID, &c.ColumnID, &c.Key, &c.Title, &c.Description, &c.Priority,
-		&c.Position, &c.AuthorID, &c.AssigneeID, &c.CreatedAt, &c.UpdatedAt)
-	return c, mapErr(err)
+	var coverID *int64
+	var coverKind *domain.AttachmentKind
+	var coverThumb *bool
+	dest := append([]any{&c.ID, &c.ProjectID, &c.ColumnID, &c.Key, &c.Title, &c.Description, &c.Priority,
+		&c.Position, &c.AuthorID, &c.AssigneeID, &c.CreatedAt, &c.UpdatedAt,
+		&c.AttachmentCount, &coverID, &coverKind, &coverThumb}, extra...)
+	if err := row.Scan(dest...); err != nil {
+		return c, mapErr(err)
+	}
+	if coverID != nil {
+		c.Cover = &domain.CardCover{AttachmentID: *coverID, Kind: *coverKind, HasThumb: coverThumb != nil && *coverThumb}
+	}
+	return c, nil
 }
 
 func (r *CardRepo) Get(ctx context.Context, cardID int64) (domain.Card, error) {

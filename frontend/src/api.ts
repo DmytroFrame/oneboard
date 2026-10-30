@@ -1,5 +1,21 @@
 import { i18n, translateError } from "./i18n";
-import type { Card, CardFilters, CardInput, CardPage, Column, CurrentUser, Member, Project, Settings, User } from "./types";
+import type {
+  Attachment,
+  Card,
+  CardFilters,
+  CardInput,
+  CardPage,
+  Column,
+  CurrentUser,
+  Dashboard,
+  Invitation,
+  Member,
+  Organization,
+  OrgMember,
+  OrgRole,
+  Project,
+  Settings,
+} from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -121,7 +137,6 @@ export const api = {
   },
   me: () => request<CurrentUser>("GET", "/auth/me"),
 
-  users: () => request<User[]>("GET", "/users"),
   uploadAvatar: (image: Blob) => {
     const form = new FormData();
     form.append("avatar", image, "avatar");
@@ -130,8 +145,26 @@ export const api = {
   removeAvatar: () => request<CurrentUser>("DELETE", "/users/me/avatar"),
   updateSettings: (settings: Settings) => request<CurrentUser>("PUT", "/users/me/settings", settings),
 
+  dashboard: () => request<Dashboard>("GET", "/dashboard"),
+
+  organizations: () => request<Organization[]>("GET", "/organizations"),
+  organization: (id: number) => request<Organization>("GET", `/organizations/${id}`),
+  createOrganization: (name: string) => request<Organization>("POST", "/organizations", { name }),
+  renameOrganization: (id: number, name: string) => request<Organization>("PUT", `/organizations/${id}`, { name }),
+  deleteOrganization: (id: number) => request<void>("DELETE", `/organizations/${id}`),
+  orgMembers: (id: number) => request<OrgMember[]>("GET", `/organizations/${id}/members`),
+  changeOrgRole: (id: number, userId: number, role: OrgRole) =>
+    request<OrgMember[]>("PUT", `/organizations/${id}/members/${userId}`, { role }),
+  removeOrgMember: (id: number, userId: number) => request<void>("DELETE", `/organizations/${id}/members/${userId}`),
+  invitations: (id: number) => request<Invitation[]>("GET", `/organizations/${id}/invitations`),
+  invite: (id: number, email: string, role: OrgRole) =>
+    request<{ status: "added" | "invited" }>("POST", `/organizations/${id}/invitations`, { email, role }),
+  revokeInvitation: (id: number, invitationId: number) =>
+    request<void>("DELETE", `/organizations/${id}/invitations/${invitationId}`),
+
   projects: () => request<Project[]>("GET", "/projects"),
-  createProject: (name: string, key: string) => request<Project>("POST", "/projects", { name, key }),
+  createProject: (organizationId: number, name: string, key: string) =>
+    request<Project>("POST", "/projects", { organizationId, name, key }),
   renameProject: (id: number, name: string) => request<Project>("PUT", `/projects/${id}`, { name }),
   deleteProject: (id: number) => request<void>("DELETE", `/projects/${id}`),
   members: (projectId: number) => request<Member[]>("GET", `/projects/${projectId}/members`),
@@ -160,4 +193,12 @@ export const api = {
   moveCard: (id: number, columnId: number, place: { beforeId?: number; afterId?: number } = {}) =>
     request<Card>("POST", `/cards/${id}/move`, { columnId, ...place }),
   deleteCard: (id: number) => request<void>("DELETE", `/cards/${id}`),
+
+  attachments: (cardId: number) => request<Attachment[]>("GET", `/cards/${cardId}/attachments`),
+  uploadAttachment: (cardId: number, file: File) => {
+    const form = new FormData();
+    form.append("file", file, file.name);
+    return request<Attachment>("POST", `/cards/${cardId}/attachments`, form);
+  },
+  deleteAttachment: (id: number) => request<void>("DELETE", `/attachments/${id}`),
 };

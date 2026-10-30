@@ -18,6 +18,7 @@ import (
 	"clodapp/backend/internal/config"
 	"clodapp/backend/internal/domain"
 	"clodapp/backend/internal/usecase/board"
+	"clodapp/backend/internal/usecase/organization"
 	"clodapp/backend/internal/usecase/project"
 )
 
@@ -26,6 +27,7 @@ var Module = fx.Module("opensearch",
 		NewCardIndex,
 		func(i *CardIndex) board.SearchIndex { return i },
 		func(i *CardIndex) project.SearchIndex { return i },
+		func(i *CardIndex) organization.SearchIndex { return i },
 	),
 )
 

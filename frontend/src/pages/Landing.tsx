@@ -30,7 +30,7 @@ export default function Landing() {
           <LanguageSelect />
           <ThemeToggle />
           {user ? (
-            <Link className="btn btn-primary" to="/projects">
+            <Link className="btn btn-primary" to="/home">
               {t("landing.openBoard")}
             </Link>
           ) : (
@@ -54,7 +54,7 @@ export default function Landing() {
           </h1>
           <p>{t("landing.lead")}</p>
           <div className="hero-cta">
-            <Link className="btn btn-primary btn-lg" to={user ? "/projects" : "/register"}>
+            <Link className="btn btn-primary btn-lg" to={user ? "/home" : "/register"}>
               {user ? t("landing.goToBoard") : t("landing.createAccount")}
             </Link>
             {!user && (
@@ -93,7 +93,7 @@ export default function Landing() {
       <section className="cta-band">
         <h2>{t("landing.ctaTitle")}</h2>
         <p>{t("landing.ctaText")}</p>
-        <Link className="btn btn-light btn-lg" to={user ? "/projects" : "/register"}>
+        <Link className="btn btn-light btn-lg" to={user ? "/home" : "/register"}>
           {user ? t("landing.ctaBoard") : t("landing.ctaSignUp")}
         </Link>
       </section>

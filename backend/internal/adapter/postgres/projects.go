@@ -16,21 +16,22 @@ func NewProjectRepo(db *DB) *ProjectRepo { return &ProjectRepo{db: db} }
 
 // projectSelect lists projects visible to the user bound to $1.
 const projectSelect = `
-	SELECT p.id, p.name, p.key, p.owner_id, m.role,
+	SELECT p.id, p.organization_id, o.name, p.name, p.key, p.owner_id, m.role,
 		(SELECT COUNT(*) FROM project_members WHERE project_id = p.id),
 		(SELECT COUNT(*) FROM cards WHERE project_id = p.id),
 		p.created_at
 	FROM projects p
+	JOIN organizations o ON o.id = p.organization_id
 	JOIN project_members m ON m.project_id = p.id AND m.user_id = $1`
 
 func scanProject(row pgx.Row) (domain.Project, error) {
 	var p domain.Project
-	err := row.Scan(&p.ID, &p.Name, &p.Key, &p.OwnerID, &p.Role, &p.MemberCount, &p.CardCount, &p.CreatedAt)
+	err := row.Scan(&p.ID, &p.OrgID, &p.OrgName, &p.Name, &p.Key, &p.OwnerID, &p.Role, &p.MemberCount, &p.CardCount, &p.CreatedAt)
 	return p, mapErr(err)
 }
 
 func (r *ProjectRepo) ListForUser(ctx context.Context, userID int64) ([]domain.Project, error) {
-	rows, err := r.db.q(ctx).Query(ctx, projectSelect+` ORDER BY lower(p.name)`, userID)
+	rows, err := r.db.q(ctx).Query(ctx, projectSelect+` ORDER BY lower(o.name), o.id, lower(p.name)`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -41,10 +42,11 @@ func (r *ProjectRepo) GetForUser(ctx context.Context, projectID, userID int64) (
 	return scanProject(r.db.q(ctx).QueryRow(ctx, projectSelect+` WHERE p.id = $2`, userID, projectID))
 }
 
-func (r *ProjectRepo) Create(ctx context.Context, name, key string, ownerID int64) (int64, error) {
+func (r *ProjectRepo) Create(ctx context.Context, orgID int64, name, key string, ownerID int64) (int64, error) {
 	var id int64
 	err := r.db.q(ctx).QueryRow(ctx,
-		`INSERT INTO projects (name, key, owner_id) VALUES ($1, $2, $3) RETURNING id`, name, key, ownerID).Scan(&id)
+		`INSERT INTO projects (organization_id, name, key, owner_id) VALUES ($1, $2, $3, $4) RETURNING id`,
+		orgID, name, key, ownerID).Scan(&id)
 	return id, mapErr(err)
 }
 
@@ -89,4 +91,25 @@ func (r *ProjectRepo) Add(ctx context.Context, projectID, userID int64, role dom
 
 func (r *ProjectRepo) Remove(ctx context.Context, projectID, userID int64) error {
 	return exec(ctx, r.db, `DELETE FROM project_members WHERE project_id = $1 AND user_id = $2`, projectID, userID)
+}
+
+func (r *ProjectRepo) TransferOwnership(ctx context.Context, orgID, from, to int64) error {
+	if err := exec(ctx, r.db, `
+		INSERT INTO project_members (project_id, user_id, role)
+		SELECT id, $3, 'owner' FROM projects WHERE organization_id = $1 AND owner_id = $2
+		ON CONFLICT (project_id, user_id) DO UPDATE SET role = 'owner'`, orgID, from, to); err != nil {
+		return err
+	}
+	return exec(ctx, r.db, `UPDATE projects SET owner_id = $3 WHERE organization_id = $1 AND owner_id = $2`, orgID, from, to)
+}
+
+func (r *ProjectRepo) RemoveFromOrgProjects(ctx context.Context, orgID, userID int64) error {
+	if err := exec(ctx, r.db, `
+		DELETE FROM project_members
+		WHERE user_id = $2 AND project_id IN (SELECT id FROM projects WHERE organization_id = $1)`, orgID, userID); err != nil {
+		return err
+	}
+	return exec(ctx, r.db, `
+		UPDATE cards SET assignee_id = NULL
+		WHERE assignee_id = $2 AND project_id IN (SELECT id FROM projects WHERE organization_id = $1)`, orgID, userID)
 }

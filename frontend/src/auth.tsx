@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { api, setSessionLostHandler } from "./api";
 import { applySettings } from "./preferences";
 import type { CurrentUser } from "./types";
@@ -64,4 +64,17 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   if (loading) return <div className="center-screen">{t("common.loading")}</div>;
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   return <>{children}</>;
+}
+
+/** Pages for signed-out visitors (landing, sign-in, sign-up); signed-in users go to their home page. */
+export function PublicOnly() {
+  const { t } = useTranslation();
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  if (loading) return <div className="center-screen">{t("common.loading")}</div>;
+  if (user) {
+    const from = (location.state as { from?: string } | null)?.from;
+    return <Navigate to={from ?? "/home"} replace />;
+  }
+  return <Outlet />;
 }

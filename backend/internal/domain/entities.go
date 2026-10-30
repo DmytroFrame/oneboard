@@ -71,6 +71,8 @@ const (
 
 type Project struct {
 	ID          int64
+	OrgID       int64
+	OrgName     string
 	Name        string
 	Key         string
 	OwnerID     int64
@@ -129,6 +131,9 @@ type Card struct {
 	AssigneeID  *int64
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+
+	AttachmentCount int
+	Cover           *CardCover
 }
 
 // CardDraft is the editable part of a card, validated by Normalize.

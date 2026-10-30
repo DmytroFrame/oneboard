@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { Card, Column, User } from "../types";
+import { PaperclipIcon } from "./Attachments";
 import { Avatar } from "./Avatar";
 
 export interface ColumnState {
@@ -12,7 +13,7 @@ export interface ColumnState {
   error: string;
 }
 
-const PRIORITY_ICON: Record<Card["priority"], { icon: string; color: string }> = {
+export const PRIORITY_ICON: Record<Card["priority"], { icon: string; color: string }> = {
   low: { icon: "↓", color: "#30a7ff" },
   medium: { icon: "=", color: "#ff9f0a" },
   high: { icon: "↑", color: "#ff6b3d" },
@@ -166,6 +167,18 @@ export function BoardColumn(props: Props) {
               onDragEnd={props.onCardDragEnd}
               onClick={() => props.onCardClick(card)}
             >
+              {card.cover && (
+                <div className={`card-cover card-cover--${card.cover.kind}`}>
+                  {card.cover.kind === "image" ? (
+                    <img src={card.cover.url} alt="" loading="lazy" draggable={false} />
+                  ) : (
+                    <>
+                      <video src={`${card.cover.url}#t=0.1`} preload="metadata" muted playsInline />
+                      <span className="play-badge">▶</span>
+                    </>
+                  )}
+                </div>
+              )}
               <div className="card-title">{card.title}</div>
               <div className="card-footer">
                 <span
@@ -176,6 +189,12 @@ export function BoardColumn(props: Props) {
                   {PRIORITY_ICON[card.priority].icon}
                 </span>
                 <span className="card-key">{card.key}</span>
+                {card.attachmentCount > 0 && (
+                  <span className="card-attachments" title={t("attachments.count", { count: card.attachmentCount })}>
+                    <PaperclipIcon size={13} />
+                    {card.attachmentCount}
+                  </span>
+                )}
                 <div className="spacer" />
                 <Avatar user={card.assigneeId ? membersById.get(card.assigneeId) : null} size={24} />
               </div>

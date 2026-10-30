@@ -20,8 +20,11 @@ import (
 	"clodapp/backend/internal/config"
 	"clodapp/backend/internal/domain"
 	"clodapp/backend/internal/usecase"
+	"clodapp/backend/internal/usecase/attachment"
 	"clodapp/backend/internal/usecase/auth"
 	"clodapp/backend/internal/usecase/board"
+	"clodapp/backend/internal/usecase/dashboard"
+	"clodapp/backend/internal/usecase/organization"
 	"clodapp/backend/internal/usecase/project"
 	"clodapp/backend/internal/usecase/user"
 )
@@ -31,21 +34,38 @@ var Module = fx.Module("postgres",
 	fx.Provide(
 		NewDB,
 		NewUserRepo, NewProjectRepo, NewColumnRepo, NewCardRepo, NewSeeder,
+		NewOrgRepo, NewOrgMemberRepo, NewInvitationRepo, NewAttachmentRepo, NewDashboardRepo,
 		func(db *DB) usecase.Transactor { return db },
 
 		func(r *UserRepo) auth.Users { return r },
 		func(r *UserRepo) user.Users { return r },
-		func(r *UserRepo) project.Users { return r },
+		func(r *UserRepo) organization.Users { return r },
 
 		func(r *ProjectRepo) project.Projects { return r },
 		func(r *ProjectRepo) project.Members { return r },
 		func(r *ProjectRepo) board.Members { return r },
+		func(r *ProjectRepo) usecase.Memberships { return r },
+		func(r *ProjectRepo) organization.Projects { return r },
 
 		func(r *ColumnRepo) project.Columns { return r },
 		func(r *ColumnRepo) board.Columns { return r },
 
 		func(r *CardRepo) project.Cards { return r },
 		func(r *CardRepo) board.Cards { return r },
+		func(r *CardRepo) attachment.Cards { return r },
+
+		func(r *OrgRepo) organization.Organizations { return r },
+		func(r *OrgMemberRepo) organization.Members { return r },
+		func(r *OrgMemberRepo) project.OrgRoles { return r },
+		func(r *InvitationRepo) organization.Invitations { return r },
+		func(r *InvitationRepo) auth.Invitations { return r },
+
+		func(r *AttachmentRepo) attachment.Attachments { return r },
+		func(r *AttachmentRepo) board.AttachmentFiles { return r },
+		func(r *AttachmentRepo) project.AttachmentFiles { return r },
+		func(r *AttachmentRepo) organization.AttachmentFiles { return r },
+
+		func(r *DashboardRepo) dashboard.Reader { return r },
 	),
 )
 

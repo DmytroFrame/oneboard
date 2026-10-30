@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { PRIORITIES, type Card, type CardInput, type Column, type Priority, type User } from "../types";
+import { PRIORITIES, type Attachment, type Card, type CardInput, type Column, type Priority, type User } from "../types";
+import { Attachments } from "./Attachments";
 import { Avatar } from "./Avatar";
 
 interface Props {
@@ -10,12 +11,15 @@ interface Props {
   users: User[];
   currentUser: User;
   canDelete: boolean;
+  isProjectOwner: boolean;
   onClose: () => void;
+  onAttachmentsChange: (card: Card, attachments: Attachment[]) => void;
   onSave: (input: CardInput, columnId: number) => Promise<void>;
   onDelete: (card: Card) => Promise<void>;
 }
 
-export function CardModal({ card, initialColumnId, columns, users, currentUser, canDelete, onClose, onSave, onDelete }: Props) {
+export function CardModal(props: Props) {
+  const { card, initialColumnId, columns, users, currentUser, canDelete, onClose, onSave, onDelete } = props;
   const { t, i18n } = useTranslation();
   const dateFmt = useMemo(() => new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeStyle: "short" }), [i18n.language]);
   const [title, setTitle] = useState(card?.title ?? "");
@@ -91,6 +95,16 @@ export function CardModal({ card, initialColumnId, columns, users, currentUser, 
               />
             </label>
             {error && <div className="form-error">{error}</div>}
+            {card ? (
+              <Attachments
+                card={card}
+                currentUserId={currentUser.id}
+                isProjectOwner={props.isProjectOwner}
+                onChange={(list) => props.onAttachmentsChange(card, list)}
+              />
+            ) : (
+              <p className="muted attachments-hint">{t("attachments.saveFirst")}</p>
+            )}
           </div>
 
           <aside className="modal-side">

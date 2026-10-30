@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { LanguageSelect } from "../components/LanguageSelect";
 import { Logo } from "../components/Logo";
@@ -23,20 +23,19 @@ function AuthLayout({ title, children }: { title: string; children: ReactNode })
 function useAfterAuth() {
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: string } | null)?.from ?? "/projects";
+  const from = (location.state as { from?: string } | null)?.from ?? "/home";
   return () => navigate(from, { replace: true });
 }
 
 export function Login() {
   const { t } = useTranslation();
-  const { user, login } = useAuth();
+  const { login } = useAuth();
   const done = useAfterAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  if (user) return <Navigate to="/projects" replace />;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -80,7 +79,7 @@ export function Login() {
 
 export function Register() {
   const { t } = useTranslation();
-  const { user, register } = useAuth();
+  const { register } = useAuth();
   const done = useAfterAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -88,7 +87,6 @@ export function Register() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  if (user) return <Navigate to="/projects" replace />;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();

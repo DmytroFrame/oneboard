@@ -65,6 +65,11 @@ type Revocations interface {
 	IsRevoked(ctx context.Context, tokenID string) (bool, error)
 }
 
+// Invitations turns pending organization invitations for an email into memberships.
+type Invitations interface {
+	AcceptPending(ctx context.Context, userID int64, email string) error
+}
+
 type PasswordHasher interface {
 	Hash(password string) (string, error)
 	Compare(hash, password string) bool
@@ -82,6 +87,7 @@ type Service struct {
 	access      AccessTokens
 	refresh     RefreshTokens
 	revocations Revocations
+	invitations Invitations
 	hasher      PasswordHasher
 }
 
@@ -91,11 +97,12 @@ type Deps struct {
 	Access      AccessTokens
 	Refresh     RefreshTokens
 	Revocations Revocations
+	Invitations Invitations
 	Hasher      PasswordHasher
 }
 
 func NewService(d Deps) *Service {
-	return &Service{users: d.Users, access: d.Access, refresh: d.Refresh, revocations: d.Revocations, hasher: d.Hasher}
+	return &Service{users: d.Users, access: d.Access, refresh: d.Refresh, revocations: d.Revocations, invitations: d.Invitations, hasher: d.Hasher}
 }
 
 type RegisterInput struct {
@@ -133,6 +140,10 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (Session, erro
 		if errors.Is(err, domain.ErrDuplicate) {
 			return Session{}, domain.ErrEmailTaken
 		}
+		return Session{}, err
+	}
+	// Organizations may have invited this email before the account existed.
+	if err := s.invitations.AcceptPending(ctx, u.ID, u.Email); err != nil {
 		return Session{}, err
 	}
 	return s.startSession(ctx, u)
