@@ -16,6 +16,7 @@ import type {
   Project,
   Settings,
 } from "./types";
+import type { VoiceParticipant } from "./voice";
 
 export class ApiError extends Error {
   constructor(
@@ -182,6 +183,11 @@ export const api = {
   updateSettings: (settings: Settings) => request<CurrentUser>("PUT", "/users/me/settings", settings),
 
   dashboard: () => request<Dashboard>("GET", "/dashboard"),
+
+  /** Who is in the voice rooms of the user's projects (non-empty rooms only, keyed by project id). */
+  voiceRooms: () => request<{ rooms: Record<string, VoiceParticipant[]> }>("GET", "/voice/rooms"),
+  /** STUN/TURN servers for WebRTC, with short-lived TURN credentials. */
+  voiceIce: () => request<{ iceServers: RTCIceServer[] }>("GET", "/voice/ice"),
 
   organizations: () => request<Organization[]>("GET", "/organizations"),
   organization: (id: number) => request<Organization>("GET", `/organizations/${id}`),

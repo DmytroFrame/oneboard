@@ -27,6 +27,7 @@ type Message struct {
 	Event     *domain.BoardEvent // set for events
 	Payload   []byte             // set for peer messages
 	UserEvent *domain.UserEvent  // set for user events (ProjectID is 0)
+	SignalTo  string             // set for a message to one connection (Payload, already encoded)
 }
 
 // Broker is the pub/sub between server instances.

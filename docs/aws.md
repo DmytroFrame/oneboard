@@ -9,6 +9,7 @@ run as many instances as you need.
 | RustFS | **Amazon S3** | accessed with the task's IAM role, no keys |
 | OpenSearch 2.19 | **Amazon OpenSearch Service** (2.x) | SigV4 signing with the IAM role, or a master user |
 | Redis 7.4 | **Amazon ElastiCache** (Valkey or Redis OSS ≥ 7) | **cluster mode disabled**, in-transit encryption |
+| coturn | **coturn on EC2** (public IP) or a managed TURN service | voice rooms; credentials from `TURN_SECRET` |
 | Redpanda | — | not used by the app yet |
 | `make run` | **ECS Fargate** behind an **Application Load Balancer** | image from the `Dockerfile` |
 
@@ -59,6 +60,12 @@ run as many instances as you need.
 7. **Secrets:** `JWT_SECRET`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD` in Secrets Manager, injected as
    environment variables through `secrets` in the task definition.
 8. **HTTPS:** an ACM certificate on the ALB, redirect 80 → 443.
+9. **TURN for voice rooms:** audio goes browser to browser and never through the ALB, but people behind
+   strict NATs need a relay. Run coturn on a small EC2 instance with an Elastic IP: `--use-auth-secret`
+   with `--static-auth-secret` = `TURN_SECRET` (from Secrets Manager), `--external-ip` = the Elastic IP,
+   and a security group open for 3478 UDP/TCP (plus 5349 TCP for `turns:` with a certificate) and the
+   relay port range (e.g. 49152–65535 UDP). Set `STUN_URLS`, `TURN_URLS` and `TURN_SECRET` on the tasks.
+   Any TURN service supporting the TURN REST API credential format works the same way.
 
 ### ECS task role IAM policy
 

@@ -56,6 +56,8 @@ var (
 	ErrLastOwner              = Validation("last_owner", "An organization needs at least one owner")
 	ErrRemoveForbidden        = Forbidden("org_remove_forbidden", "You can't remove this member")
 	ErrNotInOrg               = Validation("user_not_in_org", "Only members of the project's organization can be added")
+	ErrVoiceRoomFull          = Conflict("voice_room_full", "The voice room is full")
+	ErrVoiceNotJoined         = Validation("voice_not_joined", "Join the voice room first")
 	ErrAttachmentNotFound     = NotFound("attachment_not_found", "Attachment not found")
 	ErrAttachmentTooLarge     = TooLarge("attachment_too_large", "A file can be up to 50 MB")
 	ErrAttachmentLimit        = Validation("attachment_limit", "A card can have at most 50 attachments")

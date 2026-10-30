@@ -27,6 +27,7 @@ import (
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/organization"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/project"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/user"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/voice"
 )
 
 func New() *fx.App {
@@ -58,6 +59,7 @@ func New() *fx.App {
 		attachment.Module,
 		dashboard.Module,
 		collab.Module,
+		voice.Module,
 		fx.Provide(func(a *auth.Service) collab.Authenticator { return a }),
 
 		// Delivery.

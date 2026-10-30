@@ -30,6 +30,7 @@ import (
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/organization"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/project"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/user"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/voice"
 )
 
 // Module provides the pool, the transactor and every repository bound to the ports that use it.
@@ -50,6 +51,8 @@ var Module = fx.Module("postgres",
 		func(r *ProjectRepo) board.Members { return r },
 		func(r *ProjectRepo) usecase.Memberships { return r },
 		func(r *ProjectRepo) organization.Projects { return r },
+		func(r *ProjectRepo) voice.Members { return r },
+		func(r *ProjectRepo) voice.Projects { return r },
 
 		func(r *ColumnRepo) project.Columns { return r },
 		func(r *ColumnRepo) board.Columns { return r },

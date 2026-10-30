@@ -7,6 +7,7 @@ import { Avatar } from "../components/Avatar";
 import { AddColumn, BoardColumn, type ColumnState } from "../components/BoardColumn";
 import { LiveCursors } from "../components/LiveCursors";
 import { ProjectSettingsModal } from "../components/ProjectModals";
+import { VoiceDock } from "../components/Voice";
 import { anchorAt, type BoardEvent } from "../realtime";
 import type { Attachment, Card, CardCover, CardFilters, CardInput, Column, Member, Project } from "../types";
 import { useBoardRealtime } from "../useBoardRealtime";
@@ -631,6 +632,7 @@ function Board({ project }: { project: Project }) {
       )}
 
       <LiveCursors boardRef={boardRef} peers={peers} live={live} usersById={membersById} findCard={findCard} />
+      <VoiceDock projectId={project.id} me={me} usersById={membersById} />
 
       {settingsOpen && (
         <ProjectSettingsModal

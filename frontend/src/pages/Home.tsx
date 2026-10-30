@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { PRIORITY_ICON } from "../components/BoardColumn";
+import { VoiceRoomBadge } from "../components/Voice";
 import type { Dashboard } from "../types";
 import { useLayout } from "./AppLayout";
 
@@ -117,7 +118,9 @@ export default function Home() {
           {projects.map((p) => (
             <Link key={p.id} to={`/projects/${p.id}`} className="project-card">
               <span className="project-badge">{p.key.slice(0, 2)}</span>
-              <span className="project-card-name">{p.name}</span>
+              <span className="project-card-name">
+                {p.name} <VoiceRoomBadge projectId={p.id} />
+              </span>
               <small className="muted">{p.organizationName}</small>
               <span className="project-card-stats">
                 <span>{t("home.tasks", { count: p.cardCount })}</span>

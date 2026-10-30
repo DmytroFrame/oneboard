@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -15,13 +16,15 @@ import (
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/collab"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/voice"
 )
 
 // ---------- pub/sub between server instances ----------
 
 const (
-	boardChannelPrefix = "board:"
-	userChannelPrefix  = "user:"
+	boardChannelPrefix  = "board:"
+	userChannelPrefix   = "user:"
+	signalChannelPrefix = "rtc:" // + connection id: messages for one connection (voice signaling)
 )
 
 // envelope is what travels over a board channel.
@@ -70,9 +73,15 @@ func (b *Bus) PublishUser(ctx context.Context, e domain.UserEvent) {
 	}
 }
 
-// Subscribe listens to every board and user channel (pattern subscriptions, one set per server instance).
+// PublishSignal implements voice.Signals on "rtc:<connID>" channels.
+func (b *Bus) PublishSignal(ctx context.Context, toConnID string, payload []byte) error {
+	return b.rdb.Publish(ctx, signalChannelPrefix+toConnID, payload).Err()
+}
+
+// Subscribe listens to every board, user and connection channel (pattern subscriptions, one set per
+// server instance).
 func (b *Bus) Subscribe(ctx context.Context) (<-chan collab.Message, error) {
-	sub := b.rdb.PSubscribe(ctx, boardChannelPrefix+"*", userChannelPrefix+"*")
+	sub := b.rdb.PSubscribe(ctx, boardChannelPrefix+"*", userChannelPrefix+"*", signalChannelPrefix+"*")
 	if _, err := sub.Receive(ctx); err != nil { // wait for the subscription to be active
 		_ = sub.Close()
 		return nil, err
@@ -89,6 +98,10 @@ func (b *Bus) Subscribe(ctx context.Context) (<-chan collab.Message, error) {
 			case m, ok := <-ch:
 				if !ok {
 					return
+				}
+				if connID, ok := strings.CutPrefix(m.Channel, signalChannelPrefix); ok {
+					out <- collab.Message{SignalTo: connID, Payload: []byte(m.Payload)}
+					continue
 				}
 				if rest, ok := strings.CutPrefix(m.Channel, userChannelPrefix); ok {
 					var e domain.UserEvent
@@ -146,37 +159,113 @@ return redis.call('HVALS', KEYS[1])
 `)
 
 func (p *Presence) Put(ctx context.Context, projectID int64, peer domain.Peer, ttl time.Duration) error {
-	data, err := json.Marshal(peer)
-	if err != nil {
-		return err
-	}
-	expires := time.Now().Add(ttl).UnixMilli()
-	return presencePutScript.Run(ctx, p.rdb, presenceKeys(projectID), peer.ConnID, data, expires).Err()
+	return expiringPut(ctx, p.rdb, presenceKeys(projectID), peer.ConnID, peer, ttl)
 }
 
 func (p *Presence) Remove(ctx context.Context, projectID int64, connID string) error {
-	keys := presenceKeys(projectID)
-	_, err := p.rdb.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
-		pipe.HDel(ctx, keys[0], connID)
-		pipe.ZRem(ctx, keys[1], connID)
+	return expiringRemove(ctx, p.rdb, presenceKeys(projectID), connID)
+}
+
+func (p *Presence) List(ctx context.Context, projectID int64) ([]domain.Peer, error) {
+	return expiringList[domain.Peer](ctx, p.rdb, presenceKeys(projectID))
+}
+
+// expiringPut, expiringRemove and expiringList manage a "hash + expiry sorted set" pair of keys.
+
+func expiringPut(ctx context.Context, rdb *redis.Client, keys []string, id string, v any, ttl time.Duration) error {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	return presencePutScript.Run(ctx, rdb, keys, id, data, time.Now().Add(ttl).UnixMilli()).Err()
+}
+
+func expiringRemove(ctx context.Context, rdb *redis.Client, keys []string, id string) error {
+	_, err := rdb.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+		pipe.HDel(ctx, keys[0], id)
+		pipe.ZRem(ctx, keys[1], id)
 		return nil
 	})
 	return err
 }
 
-func (p *Presence) List(ctx context.Context, projectID int64) ([]domain.Peer, error) {
-	vals, err := presenceListScript.Run(ctx, p.rdb, presenceKeys(projectID), time.Now().UnixMilli()).StringSlice()
+func expiringList[T any](ctx context.Context, rdb *redis.Client, keys []string) ([]T, error) {
+	vals, err := presenceListScript.Run(ctx, rdb, keys, time.Now().UnixMilli()).StringSlice()
 	if err != nil {
 		return nil, err
 	}
-	peers := make([]domain.Peer, 0, len(vals))
+	out := make([]T, 0, len(vals))
 	for _, v := range vals {
-		var peer domain.Peer
-		if json.Unmarshal([]byte(v), &peer) == nil {
-			peers = append(peers, peer)
+		var item T
+		if json.Unmarshal([]byte(v), &item) == nil {
+			out = append(out, item)
 		}
 	}
-	return peers, nil
+	return out, nil
+}
+
+// ---------- voice rooms ----------
+
+// VoiceRooms keeps each board's voice room like board presence ("voice:<projectID>" hash plus
+// "voice:<projectID>:exp"), and each user's current slot as "voice:user:<userID>" =
+// "<projectID>:<connID>", so joining from another tab or board can vacate the old one.
+type VoiceRooms struct{ rdb *redis.Client }
+
+func NewVoiceRooms(rdb *redis.Client) *VoiceRooms { return &VoiceRooms{rdb: rdb} }
+
+func voiceKeys(projectID int64) []string {
+	k := fmt.Sprintf("voice:%d", projectID)
+	return []string{k, k + ":exp"}
+}
+
+func voiceUserKey(userID int64) string { return fmt.Sprintf("voice:user:%d", userID) }
+
+func (v *VoiceRooms) Put(ctx context.Context, projectID int64, p domain.VoiceParticipant, ttl time.Duration) error {
+	return expiringPut(ctx, v.rdb, voiceKeys(projectID), p.ConnID, p, ttl)
+}
+
+func (v *VoiceRooms) Remove(ctx context.Context, projectID int64, connID string) error {
+	return expiringRemove(ctx, v.rdb, voiceKeys(projectID), connID)
+}
+
+func (v *VoiceRooms) List(ctx context.Context, projectID int64) ([]domain.VoiceParticipant, error) {
+	return expiringList[domain.VoiceParticipant](ctx, v.rdb, voiceKeys(projectID))
+}
+
+var voiceClaimScript = redis.NewScript(`
+local old = redis.call('GET', KEYS[1])
+redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2])
+return old
+`)
+
+func (v *VoiceRooms) Claim(ctx context.Context, userID int64, slot voice.Slot, ttl time.Duration) (*voice.Slot, error) {
+	value := strconv.FormatInt(slot.ProjectID, 10) + ":" + slot.ConnID
+	old, err := voiceClaimScript.Run(ctx, v.rdb, []string{voiceUserKey(userID)}, value, ttl.Milliseconds()).Text()
+	if errors.Is(err, redis.Nil) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	project, conn, ok := strings.Cut(old, ":")
+	id, perr := strconv.ParseInt(project, 10, 64)
+	if !ok || perr != nil {
+		return nil, nil
+	}
+	return &voice.Slot{ProjectID: id, ConnID: conn}, nil
+}
+
+// voiceReleaseScript deletes the slot only if it is still this connection's (a newer tab may own it).
+var voiceReleaseScript = redis.NewScript(`
+local old = redis.call('GET', KEYS[1])
+if old and string.sub(old, -string.len(ARGV[1]) - 1) == ':' .. ARGV[1] then
+  redis.call('DEL', KEYS[1])
+end
+return 1
+`)
+
+func (v *VoiceRooms) Release(ctx context.Context, userID int64, connID string) error {
+	return voiceReleaseScript.Run(ctx, v.rdb, []string{voiceUserKey(userID)}, connID).Err()
 }
 
 // ---------- collaborative documents ----------

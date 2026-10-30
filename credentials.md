@@ -95,6 +95,16 @@ docker compose exec redpanda rpk topic create demo \
   -X user=oneboard -X pass=vfxpjWzVpj5YsOJvhG9n -X sasl.mechanism=SCRAM-SHA-256
 ```
 
+## coturn (TURN/STUN for voice rooms)
+
+| Setting | Value |
+|---|---|
+| STUN / TURN | `localhost:3478` (UDP and TCP), relay ports `49160–49200/udp` |
+| Auth | `use-auth-secret`: no fixed users; the backend issues short-lived credentials (`GET /api/voice/ice`) |
+| Shared secret | `TURN_SECRET` in `.env` |
+
+Relay addresses are advertised as `127.0.0.1`, so locally only browsers on this machine can use the relay.
+
 ## JWT
 
 | Setting | Value |

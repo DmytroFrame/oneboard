@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -68,6 +69,13 @@ type Config struct {
 	S3Bucket         string
 	S3ForcePathStyle bool
 	S3CreateBucket   bool // create the bucket on start if missing (local only: on AWS it is provisioned)
+
+	// WebRTC for voice rooms. TURN relays audio for people behind strict NATs; credentials are
+	// generated per user from TURNSecret (coturn "use-auth-secret").
+	STUNURLs          []string
+	TURNURLs          []string
+	TURNSecret        string
+	TURNCredentialTTL time.Duration
 }
 
 func (c Config) Production() bool { return c.Env == "production" }
@@ -208,6 +216,18 @@ func Load() (Config, error) {
 		S3CreateBucket:   env("S3_CREATE_BUCKET", pick("1", "0")) == "1",
 	}
 
+	turnTTL, err := time.ParseDuration(env("TURN_CREDENTIAL_TTL", "12h"))
+	if err != nil {
+		return Config{}, fmt.Errorf("TURN_CREDENTIAL_TTL: %w", err)
+	}
+	c.STUNURLs = splitList(os.Getenv("STUN_URLS"))
+	c.TURNURLs = splitList(os.Getenv("TURN_URLS"))
+	c.TURNSecret = os.Getenv("TURN_SECRET")
+	c.TURNCredentialTTL = turnTTL
+	if len(c.TURNURLs) > 0 && c.TURNSecret == "" {
+		return Config{}, errors.New("TURN_URLS needs TURN_SECRET (the coturn static-auth-secret)")
+	}
+
 	switch c.OpenSearchAuth {
 	case "basic", "aws", "none":
 	default:
@@ -224,6 +244,17 @@ func env(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// splitList parses a comma-separated list, ignoring blanks.
+func splitList(v string) []string {
+	var out []string
+	for _, item := range strings.Split(v, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 func boolStr(b bool) string {

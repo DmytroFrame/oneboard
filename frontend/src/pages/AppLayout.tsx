@@ -6,9 +6,11 @@ import { useAuth } from "../auth";
 import { Avatar } from "../components/Avatar";
 import { Logo } from "../components/Logo";
 import { CreateOrgModal, CreateProjectModal } from "../components/ProjectModals";
+import { CallBar, useProblemText, VoiceRoomBadge } from "../components/Voice";
 import { can } from "../orgs";
 import { BoardSocket, type UserEvent } from "../realtime";
 import type { Organization, Project } from "../types";
+import { useVoice, voice } from "../voice";
 
 export interface LayoutContext {
   projects: Project[];
@@ -92,8 +94,10 @@ export default function AppLayout() {
   // The user's own real-time channel: access granted or taken away anywhere in the app.
   useEffect(() => {
     const socket = new BoardSocket(0);
+    voice.attach(socket); // voice rooms are signaled over this channel, so calls survive navigation
     const off = socket.on("user", (m) => {
       const e = m.event as UserEvent;
+      if (e.type === "voice") return; // handled by the voice controller
       if (e.type === "org.members") {
         setOrgMembersSignal((s) => ({ orgId: e.orgId, n: s.n + 1 }));
         void reload(); // member counts
@@ -116,10 +120,31 @@ export default function AppLayout() {
     });
     return () => {
       off();
+      voice.detach();
       socket.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reload]);
+
+  // Voice: people joining or leaving the room you are in, or of the board you are looking at.
+  const onBoard = (projectId: number) => location.pathname === `/projects/${projectId}`;
+  useEffect(
+    () =>
+      voice.onRoomChange((projectId, joined, left) => {
+        if (voice.get().call?.projectId !== projectId && pathRef.current !== `/projects/${projectId}`) return;
+        const name = (joined[0] ?? left[0])!.name;
+        setNotice({ text: t(joined.length ? "voice.joinedToast" : "voice.leftToast", { name }), tone: "info" });
+      }),
+    [t],
+  );
+  // Voice problems are shown in the board's dock; elsewhere (e.g. access revoked mid-call) as a toast.
+  const { problem } = useVoice();
+  const problemText = useProblemText();
+  useEffect(() => {
+    if (!problem || pathRef.current === `/projects/${problem.projectId}`) return;
+    setNotice({ text: problemText(problem.reason), tone: "warn" });
+    voice.clearProblem();
+  }, [problem]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ctx: LayoutContext = {
     projects: projects ?? [],
@@ -156,6 +181,7 @@ export default function AppLayout() {
       </header>
 
       {!online && <div className="offline-bar">{t("pwa.offline")}</div>}
+      <CallBar projectName={(id) => projects?.find((p) => p.id === id)?.name} onBoard={onBoard} />
 
       <div className="app-body">
         {drawerOpen && <div className="drawer-backdrop" onClick={() => setDrawerOpen(false)} />}
@@ -186,6 +212,7 @@ export default function AppLayout() {
                           <span className="project-link-name">{p.name}</span>
                           <small>{t("layout.projectMeta", { key: p.key, count: p.memberCount })}</small>
                         </span>
+                        <VoiceRoomBadge projectId={p.id} />
                       </NavLink>
                     ))}
                   {can.createProjects(o.role) && (

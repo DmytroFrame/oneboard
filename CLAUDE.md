@@ -7,7 +7,7 @@ OneBoard: a kanban app. Go backend (`backend/`) + React/TypeScript SPA (`fronten
 ## Commands
 
 ```bash
-make infra-up        # docker compose up -d (Postgres, Redis, OpenSearch, RustFS, Redpanda); needs OrbStack/Docker running
+make infra-up        # docker compose up -d (Postgres, Redis, OpenSearch, RustFS, coturn, Redpanda); needs OrbStack/Docker running
 make dev-backend     # go run ./cmd/server on :8080 (migrates + seeds an empty DB on start)
 make dev-frontend    # Vite on :5173, proxies /api (incl. the /api/ws WebSocket) to :8080
 make run             # build SPA + binary, serve everything from :8080
@@ -51,6 +51,7 @@ One WebSocket endpoint `/api/ws` (`transport/httpapi/realtime.go` hub + `usecase
 - Cursors are sent as anchors (`{kind: card|column|board, id, fx, fy}`), not pixels.
 - Card title/description are a Yjs document per card. The server never parses Yjs: it keeps a numbered update log in Redis (`ydoc:<cardId>`, seeding claimed with SETNX, compaction via Lua) and relays updates. Postgres markdown stays the source of truth and is autosaved by the editing client.
 - Removing someone's access publishes `RemovedUserID` / `project.deleted`; the hub then closes their board sockets.
+- **Voice rooms** (`usecase/voice`, `frontend/src/voice.ts`, `components/Voice.tsx`): WebRTC full mesh (≤ `domain.VoiceRoomLimit` people), signaled over the **user channel** (not the board socket) so calls survive navigation; the participant id is that tab's user-channel `connId`. Server state: `voice:<projectId>` (hash + expiry ZSET, same helpers as presence) and `voice:user:<userId>` (one room per user; joining elsewhere sends `voice.left{reason:"elsewhere"}` to the old tab). Point-to-point messages go through `rtc:<connId>` pub/sub. Room changes are pushed as user events (`type:"voice"`) to every project member. The server never parses SDP. TURN credentials come from `GET /api/voice/ice` (coturn `use-auth-secret`, `TURN_SECRET`). E2E testing needs Chrome with `--use-fake-ui-for-media-stream --use-fake-device-for-media-stream`.
 
 ## Frontend
 

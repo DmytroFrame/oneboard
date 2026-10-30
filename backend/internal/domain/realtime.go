@@ -38,6 +38,8 @@ const (
 	UserAccessChanged UserEventType = "access"
 	// UserOrgMembersChanged: the member list of one of the user's organizations changed.
 	UserOrgMembersChanged UserEventType = "org.members"
+	// UserVoiceChanged: who is in the voice room of one of the user's projects changed.
+	UserVoiceChanged UserEventType = "voice"
 )
 
 type AccessReason string
@@ -59,6 +61,7 @@ type UserEvent struct {
 	ProjectID int64
 	Name      string // the organization's or project's name, for notifications
 	ActorID   int64
+	Voice     []VoiceParticipant // UserVoiceChanged: everyone now in the project's voice room
 }
 
 // Peer is one open board tab (a user may have several).
@@ -73,4 +76,17 @@ type DocInit struct {
 	Base    int64    // sequence number of the entry before Updates[0]
 	Updates [][]byte // Yjs updates (the first may be a compacted snapshot)
 	Seed    bool     // nobody has the document yet: this client must load it from the card
+}
+
+// VoiceRoomLimit caps a board's voice room: audio goes peer to peer (every participant sends their
+// microphone to every other one), which stays light up to about this many people.
+const VoiceRoomLimit = 8
+
+// VoiceParticipant is one tab connected to a board's voice room. ConnID is the tab's user-channel
+// connection, which also addresses WebRTC signaling to it.
+type VoiceParticipant struct {
+	ConnID string `json:"connId"`
+	UserID int64  `json:"userId"`
+	Name   string `json:"name"` // for notifications on pages that don't load the project's members
+	Muted  bool   `json:"muted"`
 }

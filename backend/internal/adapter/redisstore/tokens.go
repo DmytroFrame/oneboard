@@ -22,6 +22,7 @@ import (
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/auth"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/collab"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/voice"
 )
 
 var Module = fx.Module("redis",
@@ -41,6 +42,10 @@ var Module = fx.Module("redis",
 		func(b *Bus) collab.Broker { return b },
 		func(p *Presence) collab.Presence { return p },
 		func(d *DocLog) collab.DocLog { return d },
+
+		NewVoiceRooms,
+		func(v *VoiceRooms) voice.Rooms { return v },
+		func(b *Bus) voice.Signals { return b },
 	),
 )
 

@@ -72,6 +72,19 @@ when someone signs up with that email.
   - others see a "ghost" of a card while it is being dragged;
   - every change to cards, columns and members shows up for everyone immediately;
   - people see right away when they are added to or removed from an organization or project.
+- **Voice rooms** (WebRTC), one per board, like a voice channel in Discord:
+  - the microphone button sits in the board's bottom-right corner, with the avatars of the people already
+    in the room next to it, so everyone on the board sees who is talking before joining;
+  - inside: who is speaking (rings around avatars), who is muted, mute, microphone choice, leave;
+  - you stay in the call while browsing other pages; a bar at the top controls it from anywhere;
+  - the sidebar and Home show a 🎧 badge with the number of people next to projects with an active room;
+  - joining from another tab or board moves the call there; losing access to the project ends it;
+  - joins and leaves play a short chime and show a notice.
+
+  Audio goes peer to peer (a full mesh, up to 8 people per room), so the server carries no audio, only
+  signaling (see [Real time](#real-time)). A TURN server (coturn in `compose.yaml`) relays audio for
+  people whose networks don't allow a direct connection. Browsers only allow the microphone over HTTPS
+  (or on `localhost`).
 - **Notion-like task description** (TipTap): `/` slash menu (headings, lists, to-dos, quote, code,
   divider), markdown shortcuts, a floating formatting toolbar. Stored as markdown; existing tasks autosave.
 - **Attachments** (up to 50 MB each, 50 per task): the card shows a paperclip with the count and a cover
@@ -105,10 +118,10 @@ backend/
   internal/
     domain/                entities, business errors and the error-code catalog; no dependencies
     usecase/               business logic; each package declares the ports (interfaces) it needs
-      auth, user, organization, project, board, attachment, dashboard, collab (real time)
+      auth, user, organization, project, board, attachment, dashboard, collab (real time), voice
     adapter/               port implementations
       postgres/            repositories, transactions, goose migrations (migrations/*.sql), demo data
-      redisstore/          refresh tokens, access-token denylist, board/user pub/sub, presence, Yjs logs
+      redisstore/          refresh tokens, access-token denylist, pub/sub, presence, voice rooms, Yjs logs
       searchindex/         card index in OpenSearch (edge n-grams for prefix search)
       s3store/             object storage (RustFS locally, S3 on AWS) via AWS SDK v2
       jwttoken/            issuing and verifying access tokens (HS256)
@@ -152,8 +165,8 @@ translation of `errors.<code>`. Codes are listed in `backend/internal/domain/cat
 One WebSocket endpoint, `GET /api/ws`. The first message is `{type: "auth", token, projectId}`, because
 browsers can't set an `Authorization` header on WebSockets; foreign origins are rejected at the handshake.
 
-- **Fan-out** goes through Redis pub/sub (`board:<projectId>`, `user:<userId>`), so any number of backend
-  instances can serve the same board.
+- **Fan-out** goes through Redis pub/sub (`board:<projectId>`, `user:<userId>`, `rtc:<connId>`), so any
+  number of backend instances can serve the same board.
 - **Events.** After a change through the REST API, the use case publishes a domain event
   (`card.created/updated/moved/deleted`, `columns.changed`, `members.changed`, `project.deleted`) and the
   hub sends it as a DTO. A move carries the card's new neighbours, so clients can place it correctly even
@@ -170,6 +183,25 @@ browsers can't set an `Authorization` header on WebSockets; foreign origins are 
   project, their role changes, or something is renamed or deleted: the sidebar updates, a notice appears,
   pages they can no longer see redirect home, and the server closes their board sockets (code 1008,
   "access revoked") and refuses to reconnect them.
+- **Voice rooms** are signaled over the user channel, not the board connection, which is why a call
+  survives leaving the board. A participant is that tab's connection (`voice:<projectId>`, a hash plus an
+  expiry sorted set like board presence); `voice:user:<userId>` holds the user's current room, so joining
+  elsewhere vacates the old one. Messages:
+
+  | Direction | Message | |
+  |---|---|---|
+  | client → server | `voice.join {projectId, muted}` | checks project membership and the 8-person limit |
+  | | `voice.leave`, `voice.mute {muted}` | |
+  | | `voice.signal {to, signal}` | SDP offer/answer or ICE candidate for another participant |
+  | server → client | `voice.joined {projectId, participants}` | the newcomer dials everyone listed |
+  | | `voice.error {projectId, code}` | e.g. `voice_room_full` |
+  | | `voice.left {projectId, reason}` | `elsewhere` (joined from another tab/board) or `revoked` |
+  | | `voice.signal {from, userId, signal}` | relayed as is; the server never parses SDP |
+  | | `user {event: {type: "voice", projectId, participants}}` | sent to every member of the project |
+
+  Signals to one connection go through `rtc:<connId>` pub/sub channels, so the two sides may be on
+  different instances. Clients use WebRTC "perfect negotiation" (the lower connection id is the polite
+  side), restart ICE when a connection fails, and rejoin after a reconnect.
 - **Collaborative editing** with Yjs (CRDT). The server never parses Yjs; it keeps a numbered update log
   in `ydoc:<cardId>`:
   - the first client to open a task gets to seed the document from the Postgres markdown (`SETNX`);
@@ -208,6 +240,8 @@ The backend reads `../.env` (or the file in `ENV_FILE`); environment variables t
 | `S3_ACCESS_KEY`, `S3_SECRET_KEY` | `RUSTFS_*` | — (IAM role) | empty = default AWS credential chain |
 | `S3_BUCKET`, `S3_REGION` | `oneboard`, `AWS_REGION` | | |
 | `S3_FORCE_PATH_STYLE`, `S3_CREATE_BUCKET` | `1`, `1` | `0`, `0` | |
+| `STUN_URLS`, `TURN_URLS` | from `.env` (local coturn) | — | comma-separated; without them only direct connections work |
+| `TURN_SECRET`, `TURN_CREDENTIAL_TTL` | from `.env`, `12h` | | coturn `static-auth-secret`; per-user credentials are derived from it |
 
 Health endpoints: `GET /healthz` (liveness) and `GET /readyz` (readiness: Postgres and Redis).
 
@@ -245,9 +279,9 @@ Things to keep in mind:
 
 ## Infrastructure (Docker)
 
-`compose.yaml` runs PostgreSQL, Redis, OpenSearch, RustFS and Redpanda on `127.0.0.1` only. Credentials
-live in `.env`; addresses and connection strings in [credentials.md](credentials.md). The app uses
-everything except Redpanda.
+`compose.yaml` runs PostgreSQL, Redis, OpenSearch, RustFS, coturn (TURN/STUN for voice) and Redpanda on
+`127.0.0.1` only. Credentials live in `.env`; addresses and connection strings in
+[credentials.md](credentials.md). The app uses everything except Redpanda.
 
 ## API
 
@@ -259,6 +293,8 @@ everything except Redpanda.
 | POST | `/api/auth/logout` | revokes the refresh token and, if sent, the access token |
 | GET | `/api/auth/me` | current user with `settings: {language, theme}` |
 | GET | `/api/dashboard` | stats and the tasks assigned to me |
+| GET | `/api/voice/rooms` | `{rooms: {<projectId>: [{connId, userId, name, muted}]}}`, non-empty rooms of my projects |
+| GET | `/api/voice/ice` | `{iceServers}` for `RTCPeerConnection`, with TURN credentials valid for `TURN_CREDENTIAL_TTL` |
 | GET, POST | `/api/organizations` | my organizations; `{name}` creates one (the creator is owner) |
 | GET, PUT, DELETE | `/api/organizations/{id}` | rename: owner/admin; delete: owner |
 | GET | `/api/organizations/{id}/members` | members with roles |
