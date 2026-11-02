@@ -1,0 +1,178 @@
+.column {
+  @include glass;
+  flex: 1 0 264px;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r-lg);
+  padding: 10px 8px 8px;
+  max-height: 100%;
+  transition: background 0.2s, box-shadow 0.2s;
+
+  /* One column per screen, swiped sideways with snapping (the row is in pages/Board). */
+  @include mobile {
+    flex: 0 0 calc(100vw - 52px);
+    max-width: none;
+    scroll-snap-align: center;
+  }
+}
+
+/* A card is being dragged over this column. */
+.over {
+  background: var(--glass-strong);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent),
+    var(--glass-shadow),
+    inset 0 1px 0 var(--glass-edge);
+}
+
+// ---------- header ----------
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px 10px 8px;
+  min-height: 36px;
+}
+
+.title {
+  @include eyebrow(13px);
+  @include ellipsis;
+  color: var(--text-subtle);
+}
+
+.count {
+  background: var(--hover);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-subtle);
+}
+
+.rename {
+  flex: 1;
+  min-width: 0;
+
+  input {
+    width: 100%;
+    padding: 5px 10px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+}
+
+.menuWrap {
+  position: relative;
+}
+
+.menu {
+  width: 240px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* "Delete column": where its cards go. */
+.menuForm {
+  gap: 12px;
+  padding: 14px;
+  font-size: 14px;
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--text-subtle);
+    font-size: 13px;
+  }
+}
+
+.menuActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+// ---------- cards ----------
+
+/* Each column scrolls vertically (infinite scroll). */
+.body {
+  flex: 1;
+  min-height: 60px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 2px 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--separator) transparent;
+}
+
+.slot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dropIndicator {
+  height: 4px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+.sentinel {
+  height: 1px;
+  flex-shrink: 0;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  font-size: 13px;
+  color: var(--text-subtle);
+}
+
+.statusError {
+  color: var(--danger);
+}
+
+.empty {
+  text-align: center;
+  padding: 18px 8px;
+  font-size: 13px;
+  color: var(--text-faint);
+  border: 1px dashed var(--separator);
+  border-radius: var(--r-md);
+}
+
+/* "+ Create task": revealed on hover (always visible on touch screens). */
+.addCard {
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: var(--r-sm);
+  color: var(--text-subtle);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s;
+
+  .column:hover & {
+    opacity: 1;
+  }
+
+  &:hover {
+    background: var(--hover);
+  }
+
+  @include touch {
+    opacity: 1;
+  }
+}

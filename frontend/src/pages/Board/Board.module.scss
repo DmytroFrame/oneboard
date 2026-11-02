@@ -1,0 +1,61 @@
+.board {
+  position: relative; /* anchor for the live cursor layer */
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 18px 0 16px;
+  padding: 0 4px;
+
+  @include mobile {
+    gap: 8px;
+  }
+}
+
+.search {
+  width: 220px;
+  border-radius: 999px;
+  padding-left: 16px;
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+
+  @include mobile {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+}
+
+/* The row of columns scrolls horizontally; each column scrolls vertically. */
+.columns {
+  display: flex;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 4px 14px;
+  align-items: stretch;
+
+  /* Phones: one column per screen, swiped with snapping. */
+  @include mobile {
+    scroll-snap-type: x mandatory;
+    gap: 10px;
+    padding: 2px 2px 8px;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Snapping would undo the small steps of edge auto-scroll while a card is dragged. */
+.dragging {
+  @include mobile {
+    scroll-snap-type: none;
+  }
+}

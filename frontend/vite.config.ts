@@ -2,7 +2,20 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
-export default defineConfig({
+const src = decodeURIComponent(new URL("./src", import.meta.url).pathname);
+
+export default defineConfig(({ mode }) => ({
+  resolve: { alias: { "@": src } },
+  css: {
+    modules: {
+      // Readable class names while developing (Button-module_primary_x1y2), short hashes in production.
+      generateScopedName: mode === "production" ? "[hash:base64:6]" : "[name]_[local]_[hash:base64:4]",
+    },
+    preprocessorOptions: {
+      // Every stylesheet gets the design-system mixins (breakpoints, glass) without importing them.
+      scss: { additionalData: '@use "@/styles/mixins" as *;\n' },
+    },
+  },
   plugins: [
     react(),
     // Installable PWA: manifest + a Workbox service worker that precaches the app shell, so OneBoard
@@ -53,4 +66,4 @@ export default defineConfig({
       "/api": { target: "http://localhost:8080", ws: true },
     },
   },
-});
+}));

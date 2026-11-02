@@ -1,0 +1,27 @@
+.iconButton {
+  display: inline-grid;
+  place-items: center;
+  border: none;
+  background: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--text-subtle);
+  transition: background 0.2s, color 0.2s;
+
+  &:hover {
+    background: var(--hover);
+    color: var(--text);
+  }
+
+  @include touch {
+    min-height: 36px;
+  }
+}
+
+.sm {
+  width: 28px;
+  height: 28px;
+  font-size: 16px;
+}

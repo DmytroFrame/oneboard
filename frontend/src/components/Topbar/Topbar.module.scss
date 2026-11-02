@@ -1,0 +1,42 @@
+.topbar {
+  @include glass;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 58px;
+  flex-shrink: 0;
+  padding: 0 12px 0 18px;
+  border-radius: var(--r-lg);
+  position: relative;
+  z-index: 5;
+
+  @include mobile {
+    height: 52px;
+    padding: 0 8px;
+    gap: 6px;
+  }
+}
+
+/* Opens the sidebar drawer; phones only. */
+.topbar .menuToggle {
+  display: none;
+
+  @include mobile {
+    display: inline-grid;
+  }
+}
+
+.user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.name {
+  font-size: 14px;
+  font-weight: 590;
+
+  @include mobile {
+    display: none;
+  }
+}

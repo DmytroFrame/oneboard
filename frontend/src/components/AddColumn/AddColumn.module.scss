@@ -1,0 +1,40 @@
+.add {
+  @include glass;
+  width: 270px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 590;
+  color: var(--text-subtle);
+  cursor: pointer;
+  border-style: dashed;
+  transition: background 0.2s, color 0.2s;
+
+  &:is(button):hover {
+    background: var(--glass-strong);
+    color: var(--text);
+  }
+
+  /* One column per screen on phones, like the columns. */
+  @include mobile {
+    flex: 0 0 calc(100vw - 52px);
+    scroll-snap-align: center;
+  }
+}
+
+.open {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  cursor: default;
+  border-style: solid;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

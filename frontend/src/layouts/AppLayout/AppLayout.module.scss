@@ -1,0 +1,75 @@
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+
+  /* Installed PWA: keep the content clear of the notch. */
+  @include standalone {
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+
+  @include mobile {
+    height: 100dvh;
+    gap: 8px;
+    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  }
+}
+
+.body {
+  flex: 1;
+  display: flex;
+  gap: 12px;
+  min-height: 0;
+
+  @include mobile {
+    gap: 0;
+  }
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 8px 0;
+  overflow: hidden;
+
+  @include mobile {
+    padding: 4px 0 0;
+  }
+}
+
+/* Behind the sidebar drawer (phones). */
+.drawerBackdrop {
+  display: none;
+
+  @include mobile {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 110;
+    background: var(--backdrop);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+    animation: fade 0.2s ease-out;
+  }
+}
+
+.offline {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--warning-text);
+  background: color-mix(in srgb, var(--warning) 22%, var(--glass-strong));
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
+}
+
+@keyframes fade {
+  from { opacity: 0; }
+}

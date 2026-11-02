@@ -1,0 +1,12 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 590;
+  color: var(--text-subtle);
+}
+
+.hint {
+  font-weight: 400;
+}

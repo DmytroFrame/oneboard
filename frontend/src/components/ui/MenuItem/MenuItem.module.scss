@@ -1,0 +1,23 @@
+.item {
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 9px 12px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text);
+
+  &:hover:not(:disabled) {
+    background: var(--hover);
+  }
+
+  &:disabled {
+    color: var(--text-faint);
+    cursor: default;
+  }
+}
+
+.danger:not(:disabled) {
+  color: var(--danger);
+}

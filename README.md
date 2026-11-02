@@ -8,9 +8,9 @@ Repository: <https://github.com/DmytroFrame/oneboard>
 ```
 backend/   Go: Echo v5 (HTTP), uber/fx (DI), PostgreSQL (pgx + goose), JWT + Redis (sessions, pub/sub),
            OpenSearch (card search), S3 / RustFS (avatars, attachments), WebSocket (real time)
-frontend/  Vite + React + TypeScript + react-router + i18next + TipTap/Yjs: landing "/", sign-in/up,
-           home "/home", organizations "/orgs/:id", boards "/projects/:id", settings "/settings"
-docs/      deployment notes (AWS)
+frontend/  Vite + React + TypeScript + Sass (CSS modules) + react-router + i18next + TipTap/Yjs: landing "/",
+           sign-in/up, home "/home", organizations "/orgs/:id", boards "/projects/:id", settings "/settings"
+docs/      architecture (backend contexts, frontend structure), inter-service contracts, AWS deployment
 ```
 
 ## Getting started
@@ -99,7 +99,8 @@ when someone signs up with that email.
   dark), saved to the account so they follow the user across devices.
 - **i18n:** `frontend/src/i18n/en.ts` is the source of truth; TypeScript requires `uk.ts` and `de.ts` to
   have exactly the same keys. The backend, logs and seed data are in English.
-- **Liquid Glass design** (translucent layers, `backdrop-filter`) in light and dark themes.
+- **Liquid Glass design** (translucent layers, `backdrop-filter`) in light and dark themes. Every component
+  has its own CSS module on shared design tokens and mixins (see [docs/architecture.md](docs/architecture.md#frontend)).
 - **Mobile and PWA.** Installable as an app (manifest, icons, a service worker via `vite-plugin-pwa`);
   Settings shows an "Install" button, or instructions on iOS. On phones the sidebar becomes a drawer, the
   board shows one column per screen with swipe snapping, dialogs go full screen, and cards are dragged with
@@ -111,6 +112,9 @@ when someone signs up with that email.
 ## Backend architecture
 
 Dependencies only point inwards: `transport → usecase → domain`; adapters implement the use cases' ports.
+The backend is a modular monolith prepared to be split into services: bounded contexts, the rules that
+keep them separable and the extraction plan are in [docs/architecture.md](docs/architecture.md); the
+messages services exchange are in [docs/contracts.md](docs/contracts.md).
 
 ```
 backend/
@@ -127,7 +131,8 @@ backend/
       jwttoken/            issuing and verifying access tokens (HS256)
       imagethumb/          image thumbnails
       bcrypthash/          password hashing
-    transport/httpapi/     Echo router, middleware, DTOs/presenter, handlers per module, WebSocket hub
+    transport/httpapi/     Echo router, middleware, handlers + <module>_dto.go per module, WebSocket hub
+    contract/              messages between processes (pub/sub events), see docs/contracts.md
     modules/               registry of fx modules by namespace (core, adapters, usecases, transport, http.routes)
     health/                readiness checks contributed by adapters
     config/                settings from the environment and ../.env
@@ -189,7 +194,8 @@ One WebSocket endpoint, `GET /api/ws`. The first message is `{type: "auth", toke
 browsers can't set an `Authorization` header on WebSockets; foreign origins are rejected at the handshake.
 
 - **Fan-out** goes through Redis pub/sub (`board:<projectId>`, `user:<userId>`, `rtc:<connId>`), so any
-  number of backend instances can serve the same board.
+  number of backend instances can serve the same board. Messages are explicit JSON contracts
+  ([docs/contracts.md](docs/contracts.md)), not Go structs.
 - **Events.** After a change through the REST API, the use case publishes a domain event
   (`card.created/updated/moved/deleted`, `columns.changed`, `members.changed`, `project.deleted`) and the
   hub sends it as a DTO. A move carries the card's new neighbours, so clients can place it correctly even

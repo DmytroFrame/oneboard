@@ -1,0 +1,32 @@
+.card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+
+  img {
+    border-radius: 14px;
+    flex-shrink: 0;
+    box-shadow: 0 6px 18px rgba(10, 132, 255, 0.3);
+  }
+
+  @include mobile {
+    flex-wrap: wrap;
+  }
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+
+.card .text h2 {
+  margin: 0 0 4px;
+}
+
+.text {
+
+  p {
+    margin: 0;
+    font-size: 14px;
+  }
+}

@@ -1,0 +1,232 @@
+.dock {
+  position: fixed;
+  right: calc(20px + env(safe-area-inset-right));
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  z-index: 45; /* above live cursors (40), under dialogs (50) */
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-end;
+  gap: 10px;
+  pointer-events: none;
+
+  > * {
+    pointer-events: auto;
+  }
+
+  @include mobile {
+    right: calc(12px + env(safe-area-inset-right));
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    flex-direction: column; /* panel above the button */
+    align-items: flex-end;
+  }
+}
+
+// ---------- the round button ----------
+
+.fab {
+  width: 54px;
+  height: 54px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  color: var(--text);
+  background: var(--glass-thick);
+  -webkit-backdrop-filter: var(--blur-strong);
+  backdrop-filter: var(--blur-strong);
+  box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-edge);
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.2s, background 0.2s;
+
+  &:hover {
+    transform: translateY(-1px);
+  }
+
+  @include mobile {
+    width: 50px;
+    height: 50px;
+  }
+}
+
+.fabLive {
+  color: var(--on-accent);
+  background: linear-gradient(180deg, var(--success), #248a3d);
+  border-color: transparent;
+}
+
+.fabSpeaking {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 45%, transparent), var(--glass-shadow);
+}
+
+// ---------- who's in the room, while collapsed ----------
+
+.peek {
+  display: flex;
+  align-items: center;
+  padding: 5px 10px 5px 5px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-thick);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  box-shadow: var(--panel-shadow);
+  cursor: pointer;
+  align-self: center;
+  color: var(--text);
+
+  @include mobile {
+    align-self: flex-end;
+  }
+}
+
+.peekItem:not(:first-child) {
+  margin-left: -8px;
+}
+
+.peek .peekAvatar {
+  box-shadow: 0 0 0 2px var(--avatar-ring);
+}
+
+.peekItem.speaking .peekAvatar {
+  box-shadow: 0 0 0 2px var(--success);
+}
+
+.peekMore {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-subtle);
+}
+
+// ---------- the panel ----------
+
+.panel {
+  width: min(320px, calc(100vw - 104px));
+  padding: 14px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-menu);
+  -webkit-backdrop-filter: var(--blur-strong);
+  backdrop-filter: var(--blur-strong);
+  box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-edge);
+  animation: rise 0.18s ease-out;
+
+  @include mobile {
+    width: calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right));
+  }
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+
+  h3 {
+    margin: 0;
+    font-size: 15px;
+  }
+}
+
+.status {
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+
+.inCall .status {
+  color: var(--success-text);
+  font-weight: 600;
+}
+
+.problem {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.empty {
+  margin: 4px 0 12px;
+}
+
+.people {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px;
+  border-radius: var(--r-sm);
+}
+
+.person .personAvatar {
+  transition: box-shadow 0.12s;
+}
+
+.person.speaking .personAvatar {
+  box-shadow: 0 0 0 2px var(--glass-menu), 0 0 0 4px var(--success);
+}
+
+.pending {
+  opacity: 0.55;
+}
+
+.personName {
+  @include ellipsis;
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 560;
+
+  small {
+    font-weight: 400;
+    color: var(--text-subtle);
+  }
+}
+
+.muted {
+  color: var(--danger);
+  display: grid;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.device {
+  width: 100%;
+  font-size: 13px;
+  padding: 7px 10px;
+}
+
+.buttons {
+  display: flex;
+  gap: 8px;
+
+  > * {
+    flex: 1;
+  }
+}
+
+.buttons .mutedOn {
+  color: var(--danger);
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+}

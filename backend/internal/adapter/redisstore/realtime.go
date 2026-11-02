@@ -13,6 +13,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/DmytroFrame/oneboard/backend/internal/contract"
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/collab"
@@ -27,14 +28,8 @@ const (
 	signalChannelPrefix = "rtc:" // + connection id: messages for one connection (voice signaling)
 )
 
-// envelope is what travels over a board channel.
-type envelope struct {
-	From    string             `json:"from,omitempty"`
-	Event   *domain.BoardEvent `json:"event,omitempty"`
-	Payload json.RawMessage    `json:"payload,omitempty"`
-}
-
-// Bus publishes board events and peer messages on "board:<projectID>" channels.
+// Bus publishes board events and peer messages on "board:<projectID>" channels. Messages are encoded
+// as the types in internal/contract (documented in docs/contracts.md), never as domain structs.
 type Bus struct {
 	rdb *redis.Client
 	log *slog.Logger
@@ -42,7 +37,7 @@ type Bus struct {
 
 func NewBus(rdb *redis.Client, log *slog.Logger) *Bus { return &Bus{rdb: rdb, log: log} }
 
-func (b *Bus) publish(ctx context.Context, projectID int64, env envelope) error {
+func (b *Bus) publish(ctx context.Context, projectID int64, env contract.BoardEnvelope) error {
 	data, err := json.Marshal(env)
 	if err != nil {
 		return err
@@ -53,18 +48,19 @@ func (b *Bus) publish(ctx context.Context, projectID int64, env envelope) error 
 // Publish implements usecase.BoardEvents; failures are logged, never returned.
 func (b *Bus) Publish(ctx context.Context, e domain.BoardEvent) {
 	e.Origin = usecase.OriginFrom(ctx)
-	if err := b.publish(ctx, e.ProjectID, envelope{Event: &e}); err != nil {
+	wire := contract.NewBoardEvent(e)
+	if err := b.publish(ctx, e.ProjectID, contract.BoardEnvelope{Event: &wire}); err != nil {
 		b.log.Error("publish board event", "type", e.Type, "project", e.ProjectID, "err", err)
 	}
 }
 
 func (b *Bus) PublishPeer(ctx context.Context, projectID int64, from string, payload []byte) error {
-	return b.publish(ctx, projectID, envelope{From: from, Payload: payload})
+	return b.publish(ctx, projectID, contract.BoardEnvelope{From: from, Payload: payload})
 }
 
 // PublishUser implements usecase.UserEvents on "user:<id>" channels.
 func (b *Bus) PublishUser(ctx context.Context, e domain.UserEvent) {
-	data, err := json.Marshal(e)
+	data, err := json.Marshal(contract.NewUserEvent(e))
 	if err == nil {
 		err = b.rdb.Publish(ctx, userChannelPrefix+strconv.FormatInt(e.UserID, 10), data).Err()
 	}
@@ -104,10 +100,11 @@ func (b *Bus) Subscribe(ctx context.Context) (<-chan collab.Message, error) {
 					continue
 				}
 				if rest, ok := strings.CutPrefix(m.Channel, userChannelPrefix); ok {
-					var e domain.UserEvent
-					if _, err := strconv.ParseInt(rest, 10, 64); err != nil || json.Unmarshal([]byte(m.Payload), &e) != nil {
+					var wire contract.UserEvent
+					if _, err := strconv.ParseInt(rest, 10, 64); err != nil || json.Unmarshal([]byte(m.Payload), &wire) != nil {
 						continue
 					}
+					e := wire.Domain()
 					out <- collab.Message{UserEvent: &e}
 					continue
 				}
@@ -115,12 +112,17 @@ func (b *Bus) Subscribe(ctx context.Context) (<-chan collab.Message, error) {
 				if err != nil {
 					continue
 				}
-				var env envelope
+				var env contract.BoardEnvelope
 				if err := json.Unmarshal([]byte(m.Payload), &env); err != nil {
 					b.log.Warn("bad board message", "err", err)
 					continue
 				}
-				out <- collab.Message{ProjectID: projectID, From: env.From, Event: env.Event, Payload: env.Payload}
+				msg := collab.Message{ProjectID: projectID, From: env.From, Payload: env.Payload}
+				if env.Event != nil {
+					e := env.Event.Domain()
+					msg.Event = &e
+				}
+				out <- msg
 			}
 		}
 	}()

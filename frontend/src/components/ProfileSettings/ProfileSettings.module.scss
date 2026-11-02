@@ -1,0 +1,56 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+
+  @include mobile {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+
+.avatar {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.avatar .photo {
+  border-width: 3px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.busy .photo {
+  opacity: 0.5;
+}
+
+.spinner {
+  position: absolute;
+}
+
+.name {
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.email {
+  color: var(--text-subtle);
+  font-size: 14px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+
+  @include mobile {
+    justify-content: center;
+  }
+}
+
+.hint {
+  color: var(--text-subtle);
+  font-size: 12px;
+  margin: 8px 0 0;
+}

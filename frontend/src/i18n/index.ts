@@ -1,6 +1,6 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
-import type { LanguagePref, Locale } from "../types";
+import type { LanguagePref, Locale } from "@/types";
 import { de } from "./de";
 import { en } from "./en";
 import { uk } from "./uk";

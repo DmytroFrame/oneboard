@@ -1,0 +1,111 @@
+// Design tokens: "liquid glass" palette as CSS custom properties, light by default,
+// dark under :root[data-theme="dark"] (set before first paint by index.html).
+// Components use these variables, never raw colours.
+
+:root {
+  /* text */
+  --text: #1d1d1f;
+  --text-subtle: rgba(60, 60, 67, 0.68);
+  --text-faint: rgba(60, 60, 67, 0.45);
+
+  /* wallpaper */
+  --wall-base: #eef1f8;
+  --wall-1: rgba(120, 170, 255, 0.55);
+  --wall-2: rgba(255, 160, 210, 0.5);
+  --wall-3: rgba(120, 230, 210, 0.45);
+  --wall-4: rgba(255, 210, 130, 0.45);
+
+  /* glass */
+  --glass: rgba(255, 255, 255, 0.42);
+  --glass-strong: rgba(255, 255, 255, 0.66);
+  --glass-hover: rgba(255, 255, 255, 0.85);
+  --glass-thick: rgba(255, 255, 255, 0.72);
+  --glass-menu: rgba(250, 250, 252, 0.94);
+  --glass-border: rgba(255, 255, 255, 0.7);
+  --glass-edge: rgba(255, 255, 255, 0.95); /* top specular highlight */
+  --glass-under: rgba(0, 0, 0, 0.04); /* bottom inner shade */
+  --glass-shadow: 0 10px 40px rgba(31, 38, 135, 0.12), 0 2px 6px rgba(31, 38, 135, 0.06);
+  /* Panels laid out in the page flow: a soft shadow, so stacked panels don't merge into a dark slab. */
+  --panel-shadow: 0 4px 16px rgba(31, 38, 135, 0.07);
+  --blur: blur(28px) saturate(180%);
+  --blur-strong: blur(44px) saturate(200%);
+
+  --hover: rgba(0, 0, 0, 0.05);
+  --separator: rgba(60, 60, 67, 0.14);
+  --input-bg: rgba(255, 255, 255, 0.55);
+  --input-bg-focus: rgba(255, 255, 255, 0.9);
+
+  /* accents (Apple system colors) */
+  --accent: #007aff;
+  --accent-2: #5e5ce6;
+  --on-accent: #ffffff;
+  --accent-glow: rgba(0, 122, 255, 0.35);
+  --link: #0066d6;
+  --selected-bg: rgba(0, 122, 255, 0.14);
+  --selected-text: #0066d6;
+  --danger: #ff3b30;
+  --danger-bg: rgba(255, 59, 48, 0.12);
+  --on-danger: #ffffff;
+  --success: #34c759;
+  --success-text: #248a3d; /* green text on a light tint */
+  --warning: #ff9f0a;
+  --warning-text: #8a5300;
+  --violet: #af52de;
+
+  --avatar-ring: rgba(255, 255, 255, 0.9);
+  --backdrop: rgba(30, 34, 60, 0.18);
+
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 22px;
+  --r-xl: 28px;
+
+  color-scheme: light;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color: var(--text);
+}
+
+:root[data-theme="dark"] {
+  --text: #f5f5f7;
+  --text-subtle: rgba(235, 235, 245, 0.62);
+  --text-faint: rgba(235, 235, 245, 0.38);
+
+  --wall-base: #0a0c14;
+  --wall-1: rgba(40, 90, 255, 0.4);
+  --wall-2: rgba(170, 60, 220, 0.35);
+  --wall-3: rgba(0, 170, 190, 0.3);
+  --wall-4: rgba(255, 90, 120, 0.22);
+
+  --glass: rgba(36, 38, 50, 0.42);
+  --glass-strong: rgba(54, 56, 70, 0.55);
+  --glass-hover: rgba(72, 74, 90, 0.7);
+  --glass-thick: rgba(30, 32, 44, 0.7);
+  --glass-menu: rgba(40, 42, 54, 0.95);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-edge: rgba(255, 255, 255, 0.22);
+  --glass-under: rgba(0, 0, 0, 0.35);
+  --glass-shadow: 0 12px 44px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --panel-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+
+  --hover: rgba(255, 255, 255, 0.08);
+  --separator: rgba(255, 255, 255, 0.1);
+  --input-bg: rgba(255, 255, 255, 0.07);
+  --input-bg-focus: rgba(255, 255, 255, 0.12);
+
+  --accent: #0a84ff;
+  --accent-2: #7d7aff;
+  --accent-glow: rgba(10, 132, 255, 0.45);
+  --link: #64b0ff;
+  --selected-bg: rgba(10, 132, 255, 0.26);
+  --selected-text: #7cbcff;
+  --danger: #ff453a;
+  --danger-bg: rgba(255, 69, 58, 0.18);
+  --success-text: #4cd964;
+  --warning-text: #ffd28a;
+
+  --avatar-ring: rgba(255, 255, 255, 0.3);
+  --backdrop: rgba(0, 0, 0, 0.35);
+
+  color-scheme: dark;
+}

@@ -1,0 +1,24 @@
+.menu {
+  @include glass;
+  position: absolute;
+  top: calc(100% + 8px);
+  background: var(--glass-menu);
+  -webkit-backdrop-filter: var(--blur-strong);
+  backdrop-filter: var(--blur-strong);
+  border-radius: var(--r-md);
+  padding: 6px;
+  z-index: 30;
+  animation: pop 0.16s ease-out;
+}
+
+.left {
+  left: 0;
+}
+
+.right {
+  right: 0;
+}
+
+@keyframes pop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+}

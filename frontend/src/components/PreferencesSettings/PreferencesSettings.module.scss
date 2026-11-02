@@ -1,0 +1,153 @@
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.saved {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--success);
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.25s, transform 0.25s;
+}
+
+.savedOn {
+  opacity: 1;
+  transform: none;
+}
+
+.hint {
+  margin: 10px 0 0;
+}
+
+section h2.subhead {
+  margin-top: 26px;
+}
+
+// ---------- options ----------
+
+.optionGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--glass-border);
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+
+  &:hover {
+    background: var(--glass-hover);
+    transform: translateY(-1px);
+
+    @include touch {
+      transform: none;
+    }
+  }
+}
+
+.selected,
+.selected:hover {
+  border-color: var(--accent);
+  background: var(--selected-bg);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.code {
+  @include accent-gradient;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  color: var(--on-accent);
+}
+
+// ---------- theme previews ----------
+
+.themeGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+
+  @include mobile {
+    gap: 8px;
+  }
+}
+
+.themeOption {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 10px 10px 12px;
+  text-align: center;
+}
+
+/* A miniature window in light colours; dark and auto variants below. */
+.swatch {
+  position: relative;
+  height: 72px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(127, 127, 127, 0.25);
+  background: #f2f4f8;
+
+  span {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    height: 12px;
+    border-radius: 4px;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  }
+
+  span:nth-child(1) {
+    top: 10px;
+    right: 40%;
+    background: #007aff;
+  }
+
+  span:nth-child(2) {
+    top: 30px;
+  }
+
+  span:nth-child(3) {
+    top: 50px;
+    right: 30%;
+  }
+}
+
+.swatchDark {
+  background: #15171c;
+
+  span {
+    background: #2a2d35;
+  }
+
+  span:nth-child(1) {
+    background: #0a84ff;
+  }
+}
+
+.swatchAuto {
+  background: linear-gradient(135deg, #f2f4f8 50%, #15171c 50%);
+}

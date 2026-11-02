@@ -1,0 +1,14 @@
+.zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  background: var(--danger-bg);
+  border-radius: var(--r-md);
+}
+
+.text {
+  margin: 4px 0 0;
+}

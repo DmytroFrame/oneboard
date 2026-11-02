@@ -1,0 +1,41 @@
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.card {
+  @include glass;
+  width: 100%;
+  max-width: 400px;
+  padding: 34px;
+  border-radius: var(--r-xl);
+  background: var(--glass-thick);
+  -webkit-backdrop-filter: var(--blur-strong);
+  backdrop-filter: var(--blur-strong);
+
+  h1 {
+    font-size: 26px;
+    margin: 26px 0 18px;
+  }
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.note {
+  font-size: 14px;
+  color: var(--text-subtle);
+  text-align: center;
+
+  code {
+    background: var(--hover);
+    padding: 2px 6px;
+    border-radius: 6px;
+  }
+}

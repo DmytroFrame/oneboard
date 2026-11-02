@@ -1,0 +1,22 @@
+.panel {
+  @include glass-panel;
+  border-radius: var(--r-lg);
+  padding: 22px 24px;
+
+  h2 {
+    font-size: 16px;
+    margin: 0 0 14px;
+  }
+
+  @include mobile {
+    padding: 18px;
+  }
+}
+
+.compact {
+  padding: 18px 20px;
+
+  h2 {
+    margin-bottom: 12px;
+  }
+}

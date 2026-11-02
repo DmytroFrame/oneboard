@@ -1,0 +1,125 @@
+// The only global stylesheet: tokens, element defaults and third-party hooks.
+// Everything with a class name lives in its component's *.module.scss.
+
+@use "tokens";
+
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color: var(--text);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  background-color: var(--wall-base);
+  background-image:
+    radial-gradient(42vw 42vw at 8% 12%, var(--wall-1), transparent 70%),
+    radial-gradient(38vw 38vw at 92% 8%, var(--wall-2), transparent 70%),
+    radial-gradient(46vw 46vw at 85% 92%, var(--wall-3), transparent 70%),
+    radial-gradient(36vw 36vw at 12% 95%, var(--wall-4), transparent 70%);
+  background-attachment: fixed;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+/* Slowly drifting light blob for a "live" glass feel. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -20%;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(30vw 30vw at 50% 50%, var(--wall-1), transparent 70%);
+  opacity: 0.55;
+  animation: drift 28s ease-in-out infinite alternate;
+
+  @include reduced-motion {
+    animation: none;
+  }
+}
+
+@keyframes drift {
+  0% { transform: translate(-18%, -10%) scale(1); }
+  50% { transform: translate(12%, 8%) scale(1.15); }
+  100% { transform: translate(-6%, 16%) scale(0.95); }
+}
+
+a {
+  color: var(--link);
+}
+
+h1,
+h2,
+h3 {
+  color: var(--text);
+  letter-spacing: -0.015em;
+}
+
+// ---------- form controls ----------
+// Native controls are styled by element so every <input>/<select> looks the same without a wrapper.
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+input,
+select,
+textarea {
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-sm);
+  padding: 9px 12px;
+  background: var(--input-bg);
+  font-weight: 400;
+  color: var(--text);
+  outline: none;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+  transition: background 0.2s, box-shadow 0.2s, border-color 0.2s;
+
+  &::placeholder {
+    color: var(--text-faint);
+  }
+
+  &:focus {
+    background: var(--input-bg-focus);
+    border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+
+  /* 16px: iOS zooms into anything smaller on focus. */
+  @include mobile {
+    font-size: 16px;
+  }
+}
+
+input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  box-shadow: none;
+}
+
+textarea {
+  resize: vertical;
+}
+
+// ---------- third-party ----------
+
+/* The touch drag polyfill's moving card image (lib/touch.ts). */
+.dnd-poly-drag-image {
+  opacity: 0.9 !important;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.3) !important;
+  transform-origin: center;
+}

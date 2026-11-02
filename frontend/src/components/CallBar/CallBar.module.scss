@@ -1,0 +1,46 @@
+.bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid color-mix(in srgb, var(--success) 40%, transparent);
+  background: color-mix(in srgb, var(--success) 14%, var(--glass-strong));
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--success);
+  flex: none;
+}
+
+/* Joining or reconnecting. */
+.dotPending {
+  background: var(--warning);
+  animation: pulse 1s ease-in-out infinite alternate;
+}
+
+.speaking .dot {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 35%, transparent);
+}
+
+.name {
+  @include ellipsis;
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.bar .leave {
+  color: var(--danger);
+}
+
+@keyframes pulse {
+  to { opacity: 0.35; }
+}

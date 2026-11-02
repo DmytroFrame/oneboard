@@ -1,0 +1,35 @@
+.toast {
+  @include glass-menu;
+  position: fixed;
+  top: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 400;
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 11px 18px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  animation: toast-in 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+
+  @include mobile {
+    top: calc(64px + env(safe-area-inset-top));
+  }
+}
+
+.info {
+  border-left: 4px solid var(--accent);
+}
+
+.warn {
+  border-left: 4px solid var(--warning);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+}

@@ -1,0 +1,101 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-weight: 590;
+  font-size: 14px;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.2s, transform 0.12s, box-shadow 0.2s;
+
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+.primary {
+  color: var(--on-accent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 82%, white), var(--accent));
+  border-color: color-mix(in srgb, var(--accent) 70%, white);
+  box-shadow: 0 4px 14px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+
+  &:hover:not(:disabled) {
+    box-shadow: 0 6px 20px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  }
+}
+
+.ghost {
+  color: var(--text);
+  background: var(--glass-strong);
+  border-color: var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-edge), 0 1px 3px rgba(0, 0, 0, 0.05);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+
+  &:hover:not(:disabled) {
+    background: var(--glass-hover);
+  }
+}
+
+.selected {
+  color: var(--selected-text);
+  background: var(--selected-bg);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* On a coloured background (the landing page's call-to-action band). */
+.light {
+  background: rgba(255, 255, 255, 0.9);
+  color: #0066d6;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15), inset 0 1px 0 #fff;
+}
+
+.danger {
+  background: transparent;
+  color: var(--danger);
+
+  &:hover:not(:disabled) {
+    background: var(--danger-bg);
+  }
+}
+
+.dangerSolid {
+  color: var(--on-danger);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--danger) 80%, white), var(--danger));
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--danger) 35%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.link {
+  background: none;
+  color: var(--link);
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+.sm {
+  padding: 6px 12px;
+  font-size: 13px;
+
+  @include touch {
+    min-height: 36px;
+  }
+}
+
+.lg {
+  padding: 13px 26px;
+  font-size: 16px;
+}
+
+.block {
+  width: 100%;
+}

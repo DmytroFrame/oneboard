@@ -1,0 +1,136 @@
+.attachments {
+  position: relative;
+  margin-top: 18px;
+  padding: 12px;
+  border-radius: var(--r-md);
+  border: 1px dashed transparent;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+/* Files dragged over the section. */
+.drop {
+  border-color: var(--accent);
+  background: var(--selected-bg);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.dropzone,
+.empty {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-subtle);
+  padding: 14px;
+}
+
+.dropzone {
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+
+  @include mobile {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-border);
+}
+
+.uploading {
+  opacity: 0.7;
+}
+
+.preview {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  border: none;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: var(--hover);
+  cursor: zoom-in;
+  overflow: hidden;
+
+  img,
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+}
+
+.previewFile {
+  cursor: pointer;
+}
+
+.ext {
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--selected-bg);
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px 7px;
+  min-width: 0;
+
+  small {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+}
+
+.name {
+  @include ellipsis;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Download / delete over the preview: on hover, always on touch screens. */
+.actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+
+  .item:hover &,
+  .item:focus-within & {
+    opacity: 1;
+  }
+
+  @include touch {
+    opacity: 1;
+  }
+}
+
+.actions .action {
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  text-decoration: none;
+}

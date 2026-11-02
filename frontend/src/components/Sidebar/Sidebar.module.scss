@@ -1,0 +1,172 @@
+.sidebar {
+  @include glass;
+  width: 250px;
+  flex-shrink: 0;
+  border-radius: var(--r-lg);
+  padding: 16px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+
+  /* An off-canvas drawer. */
+  @include mobile {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 120;
+    width: min(300px, 86vw);
+    border-radius: 0 var(--r-xl) var(--r-xl) 0;
+    padding: calc(16px + env(safe-area-inset-top)) 12px calc(16px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
+    background: var(--glass-thick);
+    transform: translateX(-105%);
+    transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    visibility: hidden;
+  }
+}
+
+.open {
+  @include mobile {
+    transform: none;
+    visibility: visible;
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.35);
+  }
+}
+
+.title {
+  @include eyebrow;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  padding: 0 10px 6px;
+  margin-top: 14px;
+}
+
+// ---------- Home / Settings ----------
+
+.navLink {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--r-md);
+  color: var(--text-subtle);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 550;
+  border: 1px solid transparent;
+  transition: background 0.2s, color 0.2s;
+
+  &:hover {
+    background: var(--hover);
+    color: var(--text);
+  }
+}
+
+.navLinkActive {
+  @include glass-selected;
+  color: var(--text);
+}
+
+// ---------- organizations ----------
+
+.orgList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.orgLink {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: var(--r-md);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 650;
+  border: 1px solid transparent;
+  transition: background 0.2s;
+
+  &:hover {
+    background: var(--hover);
+  }
+}
+
+.orgLinkActive {
+  @include glass-selected;
+}
+
+.orgName {
+  @include ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+// ---------- projects of an organization ----------
+
+.projectList {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 3px 0 0 14px;
+  padding-left: 8px;
+  border-left: 1px solid var(--separator);
+}
+
+.projectLink {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  text-decoration: none;
+  color: var(--text);
+  border: 1px solid transparent;
+  transition: background 0.2s;
+
+  &:hover {
+    background: var(--hover);
+  }
+
+  small {
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+}
+
+.projectLinkActive {
+  @include glass-selected;
+}
+
+.projectText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.projectName {
+  @include ellipsis;
+  font-size: 14px;
+  font-weight: 590;
+}
+
+.addProject {
+  @include bare-button;
+  color: var(--text-subtle);
+  font-size: 13px;
+  text-align: left;
+  padding: 5px 10px;
+  border-radius: var(--r-sm);
+
+  &:hover {
+    background: var(--hover);
+    color: var(--text);
+  }
+}
+
+.sidebar .addOrg {
+  justify-content: flex-start;
+  margin-top: 6px;
+}

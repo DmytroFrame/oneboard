@@ -1,0 +1,27 @@
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  text-decoration: none;
+
+  svg {
+    border-radius: 8px;
+    box-shadow: 0 4px 12px var(--accent-glow);
+  }
+
+  @include mobile {
+    font-size: 17px;
+  }
+}
+
+/* The mark alone, so the landing page's controls fit on one line. */
+.compact {
+  @include mobile {
+    font-size: 0;
+    gap: 0;
+  }
+}

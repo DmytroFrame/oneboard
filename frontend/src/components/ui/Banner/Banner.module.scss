@@ -1,0 +1,26 @@
+.banner {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: var(--r-md);
+}
+
+.error {
+  background: var(--danger-bg);
+  color: var(--danger);
+  margin-bottom: 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 25%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.success {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success-text);
+  border: 1px solid color-mix(in srgb, var(--success) 35%, transparent);
+}
+
+.dismiss {
+  @include bare-button;
+}

@@ -1,0 +1,56 @@
+.head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 0 4px;
+
+  @include mobile {
+    align-items: flex-start;
+    gap: 10px;
+  }
+}
+
+.main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+
+  @include mobile {
+    gap: 12px;
+  }
+}
+
+.breadcrumbs {
+  font-size: 13px;
+  color: var(--text-subtle);
+}
+
+.title {
+  font-size: 28px;
+  font-weight: 720;
+  margin: 4px 0 0;
+
+  @include mobile {
+    font-size: 22px;
+  }
+}
+
+.titleWithMeta {
+  composes: title;
+  margin: 0 0 4px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+
+  @include mobile {
+    width: 100%;
+
+    > * {
+      flex: 1;
+    }
+  }
+}

@@ -1,0 +1,35 @@
+.rolesHint {
+  margin: 10px 0 16px;
+}
+
+.hint {
+  margin: 10px 0 0;
+}
+
+h3.subhead {
+  margin-top: 26px;
+}
+
+.roleSelect {
+  width: auto;
+  padding: 5px 28px 5px 10px;
+  font-size: 13px;
+}
+
+.inviteForm {
+  input[type="email"] {
+    flex: 1;
+  }
+
+  select {
+    width: auto;
+  }
+
+  @include mobile {
+    flex-wrap: wrap;
+
+    input[type="email"] {
+      flex: 1 1 100%;
+    }
+  }
+}

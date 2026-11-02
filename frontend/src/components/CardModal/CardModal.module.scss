@@ -1,0 +1,118 @@
+// ---------- header ----------
+
+.key {
+  font-size: 13px;
+  color: var(--text-subtle);
+  font-weight: 650;
+}
+
+/* Who else has this card open. */
+.peers {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 14px;
+}
+
+.peersLabel {
+  font-size: 12px;
+  color: var(--text-subtle);
+  margin-right: 4px;
+
+  @include mobile {
+    display: none;
+  }
+}
+
+.saveStatus {
+  font-size: 12px;
+  color: var(--text-subtle);
+  margin-right: 10px;
+}
+
+// ---------- body: text on the left, fields on the right ----------
+
+.body {
+  display: grid;
+  grid-template-columns: 1fr 250px;
+  gap: 24px;
+  padding: 12px 24px 22px;
+
+  @include mobile {
+    grid-template-columns: 1fr;
+    padding: 8px 16px 16px;
+    gap: 16px;
+  }
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.main .mainLabel {
+  margin: 14px 0 6px;
+}
+
+.titleInput {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  padding: 6px 10px;
+
+  &:hover {
+    background: var(--hover);
+  }
+
+  @include mobile {
+    font-size: 20px;
+  }
+}
+
+.attachmentsHint {
+  margin-top: 16px;
+}
+
+// ---------- sidebar ----------
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  border-radius: var(--r-lg);
+  background: var(--hover);
+  align-self: start;
+}
+
+.selectWithAvatar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  select {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.meta {
+  font-size: 12px;
+  color: var(--text-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

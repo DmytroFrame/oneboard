@@ -13,8 +13,8 @@ const (
 	EventProjectDeleted BoardEventType = "project.deleted"
 )
 
-// BoardEvent is published after a change is committed. Exported fields only: it travels between
-// server instances as JSON.
+// BoardEvent is published after a change is committed. Between processes it travels as
+// contract.BoardEvent (internal/contract), not as this struct.
 type BoardEvent struct {
 	Type         BoardEventType
 	ProjectID    int64
