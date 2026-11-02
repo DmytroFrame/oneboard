@@ -5,10 +5,11 @@ import (
 	"go.uber.org/fx"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/auth"
 )
 
-var Module = fx.Module("bcrypt", fx.Provide(func() auth.PasswordHasher { return Hasher{} }))
+var Module = modules.Register(modules.Adapters, fx.Module("bcrypt", fx.Provide(func() auth.PasswordHasher { return Hasher{} })))
 
 type Hasher struct{}
 

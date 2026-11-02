@@ -17,9 +17,11 @@ import (
 
 	"github.com/joho/godotenv"
 	"go.uber.org/fx"
+
+	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 )
 
-var Module = fx.Module("config", fx.Provide(Load))
+var Module = modules.Register(modules.Core, fx.Module("config", fx.Provide(Load)))
 
 type Config struct {
 	Env       string // "development" or "production"

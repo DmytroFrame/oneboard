@@ -1,4 +1,4 @@
-// Package app is the composition root: it assembles every module into one fx application.
+// Package app is the composition root: it assembles the registered modules into one fx application.
 package app
 
 import (
@@ -10,28 +10,21 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 
-	"github.com/DmytroFrame/oneboard/backend/internal/adapter/bcrypthash"
-	"github.com/DmytroFrame/oneboard/backend/internal/adapter/imagethumb"
-	"github.com/DmytroFrame/oneboard/backend/internal/adapter/jwttoken"
 	"github.com/DmytroFrame/oneboard/backend/internal/adapter/postgres"
-	"github.com/DmytroFrame/oneboard/backend/internal/adapter/redisstore"
-	"github.com/DmytroFrame/oneboard/backend/internal/adapter/s3store"
-	"github.com/DmytroFrame/oneboard/backend/internal/adapter/searchindex"
 	"github.com/DmytroFrame/oneboard/backend/internal/config"
-	"github.com/DmytroFrame/oneboard/backend/internal/transport/httpapi"
-	"github.com/DmytroFrame/oneboard/backend/internal/usecase/attachment"
-	"github.com/DmytroFrame/oneboard/backend/internal/usecase/auth"
+	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/board"
-	"github.com/DmytroFrame/oneboard/backend/internal/usecase/collab"
-	"github.com/DmytroFrame/oneboard/backend/internal/usecase/dashboard"
-	"github.com/DmytroFrame/oneboard/backend/internal/usecase/organization"
-	"github.com/DmytroFrame/oneboard/backend/internal/usecase/project"
-	"github.com/DmytroFrame/oneboard/backend/internal/usecase/user"
-	"github.com/DmytroFrame/oneboard/backend/internal/usecase/voice"
 )
 
+// New assembles the application from every registered module (see package modules and link.go):
+// configuration, adapters, use cases, the HTTP transport and its routes.
 func New() *fx.App {
-	return fx.New(
+	return fx.New(Options())
+}
+
+// Options is the whole application as one fx option (also what tests validate).
+func Options() fx.Option {
+	return fx.Options(
 		fx.Provide(newLogger),
 		fx.WithLogger(func(log *slog.Logger) fxevent.Logger {
 			l := &fxevent.SlogLogger{Logger: log}
@@ -39,31 +32,7 @@ func New() *fx.App {
 			return l
 		}),
 
-		config.Module,
-
-		// Adapters (infrastructure), each binding itself to the ports it implements.
-		postgres.Module,
-		redisstore.Module,
-		searchindex.Module,
-		s3store.Module,
-		bcrypthash.Module,
-		jwttoken.Module,
-		imagethumb.Module,
-
-		// Use cases.
-		auth.Module,
-		user.Module,
-		project.Module,
-		board.Module,
-		organization.Module,
-		attachment.Module,
-		dashboard.Module,
-		collab.Module,
-		voice.Module,
-		fx.Provide(func(a *auth.Service) collab.Authenticator { return a }),
-
-		// Delivery.
-		httpapi.Module,
+		modules.All(),
 
 		fx.Invoke(bootstrap),
 	)

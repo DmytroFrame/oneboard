@@ -21,10 +21,11 @@ import (
 
 	"github.com/DmytroFrame/oneboard/backend/internal/config"
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase"
 )
 
-var Module = fx.Module("voice", fx.Provide(NewService))
+var Module = modules.Register(modules.UseCases, fx.Module("voice", fx.Provide(NewService)))
 
 // PresenceTTL is how long a participant stays listed without a heartbeat (e.g. after a server crash).
 const PresenceTTL = 60 * time.Second

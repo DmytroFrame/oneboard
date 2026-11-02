@@ -12,9 +12,15 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/modules"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/collab"
 )
 
-var Module = fx.Module("auth", fx.Provide(NewService))
+var Module = modules.Register(modules.UseCases, fx.Module("auth", fx.Provide(
+	NewService,
+	// The real-time hub authenticates WebSocket connections with the same access tokens.
+	func(s *Service) collab.Authenticator { return s },
+)))
 
 // Users is the user storage this use case needs.
 type Users interface {

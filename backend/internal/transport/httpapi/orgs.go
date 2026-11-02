@@ -3,11 +3,13 @@ package httpapi
 import (
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/labstack/echo/v5"
 
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/organization"
 )
+
+func init() { registerRoutes(NewOrgHandler) }
 
 type OrgHandler struct {
 	orgs    *organization.Service
@@ -18,192 +20,181 @@ func NewOrgHandler(orgs *organization.Service, present *Presenter) *OrgHandler {
 	return &OrgHandler{orgs: orgs, present: present}
 }
 
-func (h *OrgHandler) Mount(_, private chi.Router) {
-	private.Get("/organizations", h.list)
-	private.Post("/organizations", h.create)
-	private.Get("/organizations/{id}", h.get)
-	private.Put("/organizations/{id}", h.rename)
-	private.Delete("/organizations/{id}", h.delete)
-	private.Get("/organizations/{id}/members", h.members)
-	private.Put("/organizations/{id}/members/{userId}", h.changeRole)
-	private.Delete("/organizations/{id}/members/{userId}", h.removeMember)
-	private.Get("/organizations/{id}/invitations", h.invitations)
-	private.Post("/organizations/{id}/invitations", h.invite)
-	private.Delete("/organizations/{id}/invitations/{invitationId}", h.revokeInvitation)
+func (h *OrgHandler) Mount(_, private *echo.Group) {
+	private.GET("/organizations", h.list)
+	private.POST("/organizations", h.create)
+	private.GET("/organizations/:id", h.get)
+	private.PUT("/organizations/:id", h.rename)
+	private.DELETE("/organizations/:id", h.delete)
+	private.GET("/organizations/:id/members", h.members)
+	private.PUT("/organizations/:id/members/:userId", h.changeRole)
+	private.DELETE("/organizations/:id/members/:userId", h.removeMember)
+	private.GET("/organizations/:id/invitations", h.invitations)
+	private.POST("/organizations/:id/invitations", h.invite)
+	private.DELETE("/organizations/:id/invitations/:invitationId", h.revokeInvitation)
 }
 
-func (h *OrgHandler) list(w http.ResponseWriter, r *http.Request) {
-	orgs, err := h.orgs.List(r.Context(), currentUser(r).ID)
+func (h *OrgHandler) list(c *echo.Context) error {
+	orgs, err := h.orgs.List(c.Request().Context(), currentUser(c).ID)
 	if err != nil {
-		fail(w, r, err)
-		return
+		return err
 	}
-	writeJSON(w, http.StatusOK, mapSlice(orgs, toOrg))
+	return c.JSON(http.StatusOK, mapSlice(orgs, toOrg))
 }
 
 type orgInput struct {
 	Name string `json:"name"`
 }
 
-func (h *OrgHandler) create(w http.ResponseWriter, r *http.Request) {
+func (h *OrgHandler) create(c *echo.Context) error {
 	var in orgInput
-	if !decode(w, r, &in) {
-		return
+	if err := bind(c, &in); err != nil {
+		return err
 	}
-	o, err := h.orgs.Create(r.Context(), currentUser(r).ID, in.Name)
+	o, err := h.orgs.Create(c.Request().Context(), currentUser(c).ID, in.Name)
 	if err != nil {
-		fail(w, r, err)
-		return
+		return err
 	}
-	writeJSON(w, http.StatusCreated, toOrg(o))
+	return c.JSON(http.StatusCreated, toOrg(o))
 }
 
-func (h *OrgHandler) get(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
-	}
-	o, err := h.orgs.Get(r.Context(), currentUser(r).ID, id)
+func (h *OrgHandler) get(c *echo.Context) error {
+	id, err := pathID(c, "id")
 	if err != nil {
-		fail(w, r, err)
-		return
+		return err
 	}
-	writeJSON(w, http.StatusOK, toOrg(o))
+	o, err := h.orgs.Get(c.Request().Context(), currentUser(c).ID, id)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, toOrg(o))
 }
 
-func (h *OrgHandler) rename(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
+func (h *OrgHandler) rename(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
 	}
 	var in orgInput
-	if !decode(w, r, &in) {
-		return
+	if err := bind(c, &in); err != nil {
+		return err
 	}
-	o, err := h.orgs.Rename(r.Context(), currentUser(r).ID, id, in.Name)
+	o, err := h.orgs.Rename(c.Request().Context(), currentUser(c).ID, id, in.Name)
 	if err != nil {
-		fail(w, r, err)
-		return
+		return err
 	}
-	writeJSON(w, http.StatusOK, toOrg(o))
+	return c.JSON(http.StatusOK, toOrg(o))
 }
 
-func (h *OrgHandler) delete(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
-	}
-	if err := h.orgs.Delete(r.Context(), currentUser(r).ID, id); err != nil {
-		fail(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (h *OrgHandler) members(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
-	}
-	ms, err := h.orgs.Members(r.Context(), currentUser(r).ID, id)
+func (h *OrgHandler) delete(c *echo.Context) error {
+	id, err := pathID(c, "id")
 	if err != nil {
-		fail(w, r, err)
-		return
+		return err
 	}
-	writeJSON(w, http.StatusOK, h.present.OrgMembers(ms))
+	if err := h.orgs.Delete(c.Request().Context(), currentUser(c).ID, id); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
-func (h *OrgHandler) changeRole(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
+func (h *OrgHandler) members(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
 	}
-	target, ok := pathID(w, r, "userId")
-	if !ok {
-		return
+	ms, err := h.orgs.Members(c.Request().Context(), currentUser(c).ID, id)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, h.present.OrgMembers(ms))
+}
+
+func (h *OrgHandler) changeRole(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
+	}
+	target, err := pathID(c, "userId")
+	if err != nil {
+		return err
 	}
 	var in struct {
 		Role domain.OrgRole `json:"role"`
 	}
-	if !decode(w, r, &in) {
-		return
+	if err := bind(c, &in); err != nil {
+		return err
 	}
-	ms, err := h.orgs.ChangeRole(r.Context(), currentUser(r).ID, id, target, in.Role)
+	ms, err := h.orgs.ChangeRole(c.Request().Context(), currentUser(c).ID, id, target, in.Role)
 	if err != nil {
-		fail(w, r, err)
-		return
+		return err
 	}
-	writeJSON(w, http.StatusOK, h.present.OrgMembers(ms))
+	return c.JSON(http.StatusOK, h.present.OrgMembers(ms))
 }
 
 // removeMember removes someone, or lets the caller leave when userId is their own id.
-func (h *OrgHandler) removeMember(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
+func (h *OrgHandler) removeMember(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
 	}
-	target, ok := pathID(w, r, "userId")
-	if !ok {
-		return
+	target, err := pathID(c, "userId")
+	if err != nil {
+		return err
 	}
-	if err := h.orgs.RemoveMember(r.Context(), currentUser(r).ID, id, target); err != nil {
-		fail(w, r, err)
-		return
+	if err := h.orgs.RemoveMember(c.Request().Context(), currentUser(c).ID, id, target); err != nil {
+		return err
 	}
-	w.WriteHeader(http.StatusNoContent)
+	return c.NoContent(http.StatusNoContent)
 }
 
-func (h *OrgHandler) invitations(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
-	}
-	invs, err := h.orgs.Invitations(r.Context(), currentUser(r).ID, id)
+func (h *OrgHandler) invitations(c *echo.Context) error {
+	id, err := pathID(c, "id")
 	if err != nil {
-		fail(w, r, err)
-		return
+		return err
 	}
-	writeJSON(w, http.StatusOK, mapSlice(invs, toInvitation))
+	invs, err := h.orgs.Invitations(c.Request().Context(), currentUser(c).ID, id)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, mapSlice(invs, toInvitation))
 }
 
 // invite adds a registered user right away, or keeps an invitation that is accepted on sign-up.
 // Responds with {"status": "added" | "invited"}.
-func (h *OrgHandler) invite(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
+func (h *OrgHandler) invite(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
 	}
 	var in struct {
 		Email string         `json:"email"`
 		Role  domain.OrgRole `json:"role"`
 	}
-	if !decode(w, r, &in) {
-		return
+	if err := bind(c, &in); err != nil {
+		return err
 	}
-	res, err := h.orgs.Invite(r.Context(), currentUser(r).ID, id, in.Email, in.Role)
+	res, err := h.orgs.Invite(c.Request().Context(), currentUser(c).ID, id, in.Email, in.Role)
 	if err != nil {
-		fail(w, r, err)
-		return
+		return err
 	}
 	status := "invited"
 	if res.Added {
 		status = "added"
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{"status": status})
+	return c.JSON(http.StatusCreated, map[string]string{"status": status})
 }
 
-func (h *OrgHandler) revokeInvitation(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
+func (h *OrgHandler) revokeInvitation(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
 	}
-	invID, ok := pathID(w, r, "invitationId")
-	if !ok {
-		return
+	invID, err := pathID(c, "invitationId")
+	if err != nil {
+		return err
 	}
-	if err := h.orgs.RevokeInvitation(r.Context(), currentUser(r).ID, id, invID); err != nil {
-		fail(w, r, err)
-		return
+	if err := h.orgs.RevokeInvitation(c.Request().Context(), currentUser(c).ID, id, invID); err != nil {
+		return err
 	}
-	w.WriteHeader(http.StatusNoContent)
+	return c.NoContent(http.StatusNoContent)
 }

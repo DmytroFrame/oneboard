@@ -19,19 +19,20 @@ import (
 
 	"github.com/DmytroFrame/oneboard/backend/internal/config"
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/board"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/organization"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/project"
 )
 
-var Module = fx.Module("opensearch",
+var Module = modules.Register(modules.Adapters, fx.Module("opensearch",
 	fx.Provide(
 		NewCardIndex,
 		func(i *CardIndex) board.SearchIndex { return i },
 		func(i *CardIndex) project.SearchIndex { return i },
 		func(i *CardIndex) organization.SearchIndex { return i },
 	),
-)
+))
 
 // Words are indexed as edge n-grams so that typing the beginning of any word matches
 // ("lo" finds "login"); the query side uses the plain standard analyzer.

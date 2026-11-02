@@ -15,10 +15,11 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase"
 )
 
-var Module = fx.Module("user", fx.Provide(NewService))
+var Module = modules.Register(modules.UseCases, fx.Module("user", fx.Provide(NewService)))
 
 const MaxAvatarBytes = 5 << 20
 

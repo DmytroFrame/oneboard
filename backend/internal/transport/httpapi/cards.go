@@ -6,11 +6,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/labstack/echo/v5"
 
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/board"
 )
+
+func init() { registerRoutes(NewCardHandler) }
 
 type CardHandler struct {
 	cards   *board.CardService
@@ -21,14 +23,19 @@ func NewCardHandler(cards *board.CardService, present *Presenter) *CardHandler {
 	return &CardHandler{cards: cards, present: present}
 }
 
-func (h *CardHandler) Mount(_, private chi.Router) {
-	private.Get("/projects/{id}/cards", h.list)
-	private.Post("/projects/{id}/cards", h.create)
-	private.Get("/cards/{id}", h.get)
-	private.Put("/cards/{id}", h.update)
-	private.Post("/cards/{id}/move", h.move)
-	private.Delete("/cards/{id}", h.delete)
+func (h *CardHandler) Mount(_, private *echo.Group) {
+	private.GET("/projects/:id/cards", h.list)
+	private.POST("/projects/:id/cards", h.create)
+	private.GET("/cards/:id", h.get)
+	private.PUT("/cards/:id", h.update)
+	private.POST("/cards/:id/move", h.move)
+	private.DELETE("/cards/:id", h.delete)
 }
+
+var (
+	errColumnRequired = &apiError{http.StatusBadRequest, "column_required", "The column parameter is required"}
+	errCursorInvalid  = &apiError{http.StatusBadRequest, "cursor_invalid", "Invalid cursor"}
+)
 
 // list returns one page of a column's cards, ordered by position.
 //
@@ -38,43 +45,39 @@ func (h *CardHandler) Mount(_, private chi.Router) {
 //	?q=<text>          full-text search (OpenSearch) in key, title and description
 //	?assignees=1,2     only these assignees
 //	?unassigned=1      include unassigned cards (OR-ed with assignees)
-func (h *CardHandler) list(w http.ResponseWriter, r *http.Request) {
-	projectID, ok := pathID(w, r, "id")
-	if !ok {
-		return
-	}
-	q := r.URL.Query()
-	columnID, err := strconv.ParseInt(q.Get("column"), 10, 64)
+func (h *CardHandler) list(c *echo.Context) error {
+	projectID, err := pathID(c, "id")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "column_required", "The column parameter is required")
-		return
+		return err
+	}
+	columnID, err := strconv.ParseInt(c.QueryParam("column"), 10, 64)
+	if err != nil {
+		return errColumnRequired
 	}
 	query := board.ListQuery{
 		ColumnID:   columnID,
-		Search:     q.Get("q"),
-		Unassigned: q.Get("unassigned") == "1",
+		Search:     c.QueryParam("q"),
+		Unassigned: c.QueryParam("unassigned") == "1",
 	}
-	query.Limit, _ = strconv.Atoi(q.Get("limit"))
-	for _, part := range strings.Split(q.Get("assignees"), ",") {
+	query.Limit, _ = strconv.Atoi(c.QueryParam("limit"))
+	for _, part := range strings.Split(c.QueryParam("assignees"), ",") {
 		if id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64); err == nil {
 			query.Assignees = append(query.Assignees, id)
 		}
 	}
-	if c := q.Get("cursor"); c != "" {
+	if cursor := c.QueryParam("cursor"); cursor != "" {
 		var cur domain.CardCursor
-		if _, err := fmt.Sscanf(c, "%d:%d", &cur.Position, &cur.ID); err != nil {
-			writeError(w, http.StatusBadRequest, "cursor_invalid", "Invalid cursor")
-			return
+		if _, err := fmt.Sscanf(cursor, "%d:%d", &cur.Position, &cur.ID); err != nil {
+			return errCursorInvalid
 		}
 		query.Cursor = &cur
 	}
 
-	page, err := h.cards.List(r.Context(), currentUser(r).ID, projectID, query)
+	page, err := h.cards.List(c.Request().Context(), currentUser(c).ID, projectID, query)
 	if err != nil {
-		fail(w, r, err)
-		return
+		return err
 	}
-	writeJSON(w, http.StatusOK, h.present.CardPage(page))
+	return c.JSON(http.StatusOK, h.present.CardPage(page))
 }
 
 type cardInput struct {
@@ -89,82 +92,77 @@ func (in cardInput) draft() domain.CardDraft {
 	return domain.CardDraft{Title: in.Title, Description: in.Description, Priority: in.Priority, AssigneeID: in.AssigneeID}
 }
 
-func (h *CardHandler) create(w http.ResponseWriter, r *http.Request) {
-	projectID, ok := pathID(w, r, "id")
-	if !ok {
-		return
+func (h *CardHandler) create(c *echo.Context) error {
+	projectID, err := pathID(c, "id")
+	if err != nil {
+		return err
 	}
 	var in cardInput
-	if !decode(w, r, &in) {
-		return
+	if err := bind(c, &in); err != nil {
+		return err
 	}
-	c, err := h.cards.Create(r.Context(), currentUser(r).ID, projectID, in.ColumnID, in.draft())
+	card, err := h.cards.Create(c.Request().Context(), currentUser(c).ID, projectID, in.ColumnID, in.draft())
 	if err != nil {
-		fail(w, r, err)
-		return
+		return err
 	}
-	writeJSON(w, http.StatusCreated, h.present.Card(c))
+	return c.JSON(http.StatusCreated, h.present.Card(card))
 }
 
-func (h *CardHandler) get(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
-	}
-	c, err := h.cards.Get(r.Context(), currentUser(r).ID, id)
+func (h *CardHandler) get(c *echo.Context) error {
+	id, err := pathID(c, "id")
 	if err != nil {
-		fail(w, r, err)
-		return
+		return err
 	}
-	writeJSON(w, http.StatusOK, h.present.Card(c))
+	card, err := h.cards.Get(c.Request().Context(), currentUser(c).ID, id)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, h.present.Card(card))
 }
 
-func (h *CardHandler) update(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
+func (h *CardHandler) update(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
 	}
 	var in cardInput
-	if !decode(w, r, &in) {
-		return
+	if err := bind(c, &in); err != nil {
+		return err
 	}
-	c, err := h.cards.Update(r.Context(), currentUser(r).ID, id, in.draft())
+	card, err := h.cards.Update(c.Request().Context(), currentUser(c).ID, id, in.draft())
 	if err != nil {
-		fail(w, r, err)
-		return
+		return err
 	}
-	writeJSON(w, http.StatusOK, h.present.Card(c))
+	return c.JSON(http.StatusOK, h.present.Card(card))
 }
 
-func (h *CardHandler) move(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
+func (h *CardHandler) move(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
 	}
 	var in struct {
 		ColumnID int64  `json:"columnId"`
 		BeforeID *int64 `json:"beforeId"`
 		AfterID  *int64 `json:"afterId"`
 	}
-	if !decode(w, r, &in) {
-		return
+	if err := bind(c, &in); err != nil {
+		return err
 	}
-	c, err := h.cards.Move(r.Context(), currentUser(r).ID, id, in.ColumnID, board.Placement{BeforeID: in.BeforeID, AfterID: in.AfterID})
+	card, err := h.cards.Move(c.Request().Context(), currentUser(c).ID, id, in.ColumnID, board.Placement{BeforeID: in.BeforeID, AfterID: in.AfterID})
 	if err != nil {
-		fail(w, r, err)
-		return
+		return err
 	}
-	writeJSON(w, http.StatusOK, h.present.Card(c))
+	return c.JSON(http.StatusOK, h.present.Card(card))
 }
 
-func (h *CardHandler) delete(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
+func (h *CardHandler) delete(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
 	}
-	if err := h.cards.Delete(r.Context(), currentUser(r).ID, id); err != nil {
-		fail(w, r, err)
-		return
+	if err := h.cards.Delete(c.Request().Context(), currentUser(c).ID, id); err != nil {
+		return err
 	}
-	w.WriteHeader(http.StatusNoContent)
+	return c.NoContent(http.StatusNoContent)
 }

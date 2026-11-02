@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"mime"
 	"net/http"
@@ -10,21 +11,30 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/labstack/echo/v5"
 
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
 )
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+// Handlers return errors; errorHandler turns them into {"error": <English message>, "code": <stable
+// code the client translates>}. Use case errors carry their code in domain.Error; apiError covers what
+// the transport itself rejects.
+
+type apiError struct {
+	status    int
+	code, msg string
 }
 
-// writeError sends {"error": <English message>, "code": <stable code the client translates>}.
-func writeError(w http.ResponseWriter, status int, code, msg string) {
-	writeJSON(w, status, map[string]string{"error": msg, "code": code})
-}
+func (e *apiError) Error() string   { return e.msg }
+func (e *apiError) StatusCode() int { return e.status }
+
+var (
+	errInvalidJSON      = &apiError{http.StatusBadRequest, "invalid_json", "Invalid JSON"}
+	errInvalidID        = &apiError{http.StatusBadRequest, "invalid_id", "Invalid id"}
+	errNotFound         = &apiError{http.StatusNotFound, "not_found", "Not found"}
+	errMethodNotAllowed = &apiError{http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed"}
+	errInternal         = &apiError{http.StatusInternalServerError, "internal", "Internal server error"}
+)
 
 var statusByKind = map[domain.Kind]int{
 	domain.KindValidation:   http.StatusBadRequest,
@@ -35,37 +45,61 @@ var statusByKind = map[domain.Kind]int{
 	domain.KindTooLarge:     http.StatusRequestEntityTooLarge,
 }
 
-// fail maps a use case error to a response; unexpected errors are logged and hidden from the client.
-func fail(w http.ResponseWriter, r *http.Request, err error) {
+// resolveError maps an error to the response; nil means it is unexpected (logged, hidden from the client).
+func resolveError(err error) *apiError {
 	if e, ok := domain.AsError(err); ok {
 		if status, ok := statusByKind[e.Kind]; ok {
-			writeError(w, status, e.Code, e.Msg)
-			return
+			return &apiError{status, e.Code, e.Msg}
 		}
 	}
-	slog.ErrorContext(r.Context(), "internal error", "method", r.Method, "path", r.URL.Path, "err", err)
-	writeError(w, http.StatusInternalServerError, "internal", "Internal server error")
+	var ae *apiError
+	if errors.As(err, &ae) {
+		return ae
+	}
+	switch echo.StatusCode(err) { // the router's own errors
+	case http.StatusNotFound:
+		return errNotFound
+	case http.StatusMethodNotAllowed:
+		return errMethodNotAllowed
+	}
+	return nil
 }
 
-func decode(w http.ResponseWriter, r *http.Request, v any) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+func errorHandler(c *echo.Context, err error) {
+	if resp, _ := echo.UnwrapResponse(c.Response()); resp != nil && resp.Committed {
+		return
+	}
+	e := resolveError(err)
+	if e == nil {
+		r := c.Request()
+		slog.ErrorContext(r.Context(), "internal error", "method", r.Method, "path", r.URL.Path, "err", err)
+		e = errInternal
+	}
+	if c.Request().Method == http.MethodHead {
+		_ = c.NoContent(e.status)
+		return
+	}
+	_ = c.JSON(e.status, map[string]string{"error": e.msg, "code": e.code})
+}
+
+// bind decodes a JSON body of up to 1 MB.
+func bind(c *echo.Context, v any) error {
+	r := c.Request()
+	r.Body = http.MaxBytesReader(c.Response(), r.Body, 1<<20)
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Invalid JSON")
-		return false
+		return errInvalidJSON
 	}
-	return true
+	return nil
 }
 
-func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
-	id, err := strconv.ParseInt(chi.URLParam(r, name), 10, 64)
+func pathID(c *echo.Context, name string) (int64, error) {
+	id, err := strconv.ParseInt(c.Param(name), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_id", "Invalid id")
-		return 0, false
+		return 0, errInvalidID
 	}
-	return id, true
+	return id, nil
 }
 
-// spaHandler serves the built frontend and falls back to index.html for client-side routes.
 func init() {
 	// The PWA manifest; Go's built-in table doesn't know the extension.
 	_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
@@ -75,9 +109,9 @@ func init() {
 // Caching: content-hashed files under /assets/ never change, so they are cached for a year; the entry
 // points (index.html, the service worker, the manifest) are always revalidated, so a new deploy is
 // picked up — the service worker then updates the precached app shell.
-func spaHandler(dir string) http.Handler {
+func spaHandler(dir string) echo.HandlerFunc {
 	fs := http.FileServer(http.Dir(dir))
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return echo.WrapHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := filepath.Join(dir, filepath.Clean("/"+r.URL.Path))
 		if info, err := os.Stat(path); err != nil || info.IsDir() {
 			w.Header().Set("Cache-Control", "no-cache")
@@ -92,5 +126,5 @@ func spaHandler(dir string) http.Handler {
 			w.Header().Set("Cache-Control", "no-cache")
 		}
 		fs.ServeHTTP(w, r)
-	})
+	}))
 }

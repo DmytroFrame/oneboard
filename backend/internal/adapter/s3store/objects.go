@@ -18,6 +18,7 @@ import (
 
 	"github.com/DmytroFrame/oneboard/backend/internal/config"
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/attachment"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/board"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/organization"
@@ -25,7 +26,7 @@ import (
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/user"
 )
 
-var Module = fx.Module("s3",
+var Module = modules.Register(modules.Adapters, fx.Module("s3",
 	fx.Provide(
 		NewObjectStore,
 		func(s *ObjectStore) user.AvatarStorage { return s },
@@ -34,7 +35,7 @@ var Module = fx.Module("s3",
 		func(s *ObjectStore) project.FileStorage { return s },
 		func(s *ObjectStore) organization.FileStorage { return s },
 	),
-)
+))
 
 type ObjectStore struct {
 	client *s3.Client

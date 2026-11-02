@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5/middleware"
+	"github.com/labstack/echo/v5"
 
 	"github.com/DmytroFrame/oneboard/backend/internal/config"
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
@@ -34,9 +34,10 @@ func NewMiddleware(a *auth.Service, log *slog.Logger, cfg config.Config) *Middle
 	return &Middleware{auth: a, log: log, secureCookies: cfg.SecureCookies, refreshTTL: cfg.RefreshTokenTTL}
 }
 
-// currentUser is set by RequireAuth.
-func currentUser(r *http.Request) domain.User {
-	u, _ := r.Context().Value(ctxKey{}).(domain.User)
+// currentUser is set by RequireAuth. It lives in the request context (not only in the echo context),
+// next to the realtime origin that the use cases read.
+func currentUser(c *echo.Context) domain.User {
+	u, _ := c.Request().Context().Value(ctxKey{}).(domain.User)
 	return u
 }
 
@@ -51,34 +52,40 @@ func bearerToken(r *http.Request) string {
 
 // RequireAuth accepts only a valid, unrevoked JWT access token in the Authorization header.
 // Cookies are deliberately ignored here, which also rules out CSRF on the API.
-func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func (m *Middleware) RequireAuth(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		r := c.Request()
 		token := bearerToken(r)
 		if token == "" {
-			fail(w, r, domain.ErrNotAuthenticated)
-			return
+			return domain.ErrNotAuthenticated
 		}
 		u, err := m.auth.Authenticate(r.Context(), token)
 		if err != nil {
-			fail(w, r, err)
-			return
+			return err
 		}
 		ctx := context.WithValue(r.Context(), ctxKey{}, u)
 		// The tab's real-time connection id (hex, see newConnID), echoed in the board events this request causes.
 		if origin := r.Header.Get("X-Realtime-Conn"); len(origin) <= 32 && isHex(origin) {
 			ctx = usecase.WithOrigin(ctx, origin)
 		}
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+		c.SetRequest(r.WithContext(ctx))
+		return next(c)
+	}
 }
 
-func (m *Middleware) Log(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// Log writes one line per API request, with the status the error handler is going to send.
+func (m *Middleware) Log(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c *echo.Context) error {
 		start := time.Now()
-		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
-		next.ServeHTTP(ww, r)
-		m.log.Info("request", "method", r.Method, "path", r.URL.Path, "status", ww.Status(), "took", time.Since(start).Round(time.Microsecond))
-	})
+		err := next(c)
+		_, status := echo.ResolveResponseStatus(c.Response(), err)
+		if e := resolveError(err); err != nil && e != nil {
+			status = e.status
+		}
+		r := c.Request()
+		m.log.Info("request", "method", r.Method, "path", r.URL.Path, "status", status, "took", time.Since(start).Round(time.Microsecond))
+		return err
+	}
 }
 
 func (m *Middleware) setRefreshCookie(w http.ResponseWriter, token string) {

@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/labstack/echo/v5"
 
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/attachment"
 )
+
+func init() { registerRoutes(NewAttachmentHandler) }
 
 type AttachmentHandler struct {
 	attachments *attachment.Service
@@ -22,98 +24,92 @@ func NewAttachmentHandler(a *attachment.Service, present *Presenter) *Attachment
 	return &AttachmentHandler{attachments: a, present: present}
 }
 
-func (h *AttachmentHandler) Mount(public, private chi.Router) {
-	private.Get("/cards/{id}/attachments", h.list)
-	private.Post("/cards/{id}/attachments", h.upload)
-	private.Delete("/attachments/{id}", h.delete)
-	// Authorised by the signed, expiring URL — see Presenter.
-	public.Get("/attachments/{id}/{variant:file|thumb}", h.serve)
+func (h *AttachmentHandler) Mount(public, private *echo.Group) {
+	private.GET("/cards/:id/attachments", h.list)
+	private.POST("/cards/:id/attachments", h.upload)
+	private.DELETE("/attachments/:id", h.delete)
+	// Authorised by the signed, expiring URL — see Presenter. :variant is "file" or "thumb".
+	public.GET("/attachments/:id/:variant", h.serve)
 }
 
-func (h *AttachmentHandler) list(w http.ResponseWriter, r *http.Request) {
-	cardID, ok := pathID(w, r, "id")
-	if !ok {
-		return
-	}
-	as, err := h.attachments.List(r.Context(), currentUser(r).ID, cardID)
+func (h *AttachmentHandler) list(c *echo.Context) error {
+	cardID, err := pathID(c, "id")
 	if err != nil {
-		fail(w, r, err)
-		return
+		return err
 	}
-	writeJSON(w, http.StatusOK, mapSlice(as, h.present.Attachment))
+	as, err := h.attachments.List(c.Request().Context(), currentUser(c).ID, cardID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, mapSlice(as, h.present.Attachment))
 }
 
 // upload takes multipart/form-data with the file in the "file" field.
-func (h *AttachmentHandler) upload(w http.ResponseWriter, r *http.Request) {
-	cardID, ok := pathID(w, r, "id")
-	if !ok {
-		return
+func (h *AttachmentHandler) upload(c *echo.Context) error {
+	cardID, err := pathID(c, "id")
+	if err != nil {
+		return err
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, domain.MaxAttachmentBytes+1<<20) // room for multipart headers
+	r := c.Request()
+	r.Body = http.MaxBytesReader(c.Response(), r.Body, domain.MaxAttachmentBytes+1<<20) // room for multipart headers
 	// Up to 8 MB stays in memory; larger files are spooled to a temp file by the multipart parser.
 	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		var tooBig *http.MaxBytesError
 		if errors.As(err, &tooBig) {
-			fail(w, r, domain.ErrAttachmentTooLarge)
-			return
+			return domain.ErrAttachmentTooLarge
 		}
-		fail(w, r, domain.ErrAttachmentMissing)
-		return
+		return domain.ErrAttachmentMissing
 	}
 	defer r.MultipartForm.RemoveAll()
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		fail(w, r, domain.ErrAttachmentMissing)
-		return
+		return domain.ErrAttachmentMissing
 	}
 	defer file.Close()
 
-	a, err := h.attachments.Upload(r.Context(), currentUser(r).ID, cardID, attachment.Upload{
+	a, err := h.attachments.Upload(r.Context(), currentUser(c).ID, cardID, attachment.Upload{
 		FileName: header.Filename,
 		Size:     header.Size,
 		Body:     file,
 	})
 	if err != nil {
-		fail(w, r, err)
-		return
+		return err
 	}
-	writeJSON(w, http.StatusCreated, h.present.Attachment(a))
+	return c.JSON(http.StatusCreated, h.present.Attachment(a))
 }
 
-func (h *AttachmentHandler) delete(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
+func (h *AttachmentHandler) delete(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
 	}
-	if _, err := h.attachments.Delete(r.Context(), currentUser(r).ID, id); err != nil {
-		fail(w, r, err)
-		return
+	if _, err := h.attachments.Delete(c.Request().Context(), currentUser(c).ID, id); err != nil {
+		return err
 	}
-	w.WriteHeader(http.StatusNoContent)
+	return c.NoContent(http.StatusNoContent)
 }
 
 // serve streams a file. Images and videos are shown inline (with Range support for seeking);
 // anything else is forced to download so an uploaded HTML/SVG can never run on our origin.
-func (h *AttachmentHandler) serve(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
+func (h *AttachmentHandler) serve(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
 	}
-	variant := chi.URLParam(r, "variant")
-	q := r.URL.Query()
-	if !h.present.validAttachmentSig(id, variant, q.Get("exp"), q.Get("sig")) {
-		fail(w, r, domain.ErrAttachmentNotFound)
-		return
+	variant := c.Param("variant")
+	if variant != "file" && variant != "thumb" {
+		return errNotFound
+	}
+	if !h.present.validAttachmentSig(id, variant, c.QueryParam("exp"), c.QueryParam("sig")) {
+		return domain.ErrAttachmentNotFound
 	}
 
-	a, obj, err := h.attachments.Open(r.Context(), id, attachment.Variant(variant), r.Header.Get("Range"))
+	a, obj, err := h.attachments.Open(c.Request().Context(), id, attachment.Variant(variant), c.Request().Header.Get("Range"))
 	if errors.Is(err, attachment.ErrInvalidRange) {
-		w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
-		return
+		return c.NoContent(http.StatusRequestedRangeNotSatisfiable)
 	}
 	if err != nil {
-		fail(w, r, err)
-		return
+		return err
 	}
 	defer obj.Body.Close()
 
@@ -124,10 +120,11 @@ func (h *AttachmentHandler) serve(w http.ResponseWriter, r *http.Request) {
 	case a.Kind != domain.AttachmentFile:
 		contentType, disposition = a.ContentType, "inline"
 	}
-	if q.Get("download") == "1" {
+	if c.QueryParam("download") == "1" {
 		disposition = "attachment"
 	}
 
+	w := c.Response()
 	hdr := w.Header()
 	hdr.Set("Content-Type", contentType)
 	hdr.Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": a.FileName}))
@@ -145,4 +142,5 @@ func (h *AttachmentHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(status)
 	_, _ = io.Copy(w, obj.Body)
+	return nil
 }

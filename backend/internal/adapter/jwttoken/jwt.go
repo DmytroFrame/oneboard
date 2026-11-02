@@ -13,15 +13,16 @@ import (
 
 	"github.com/DmytroFrame/oneboard/backend/internal/config"
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/auth"
 )
 
-var Module = fx.Module("jwt",
+var Module = modules.Register(modules.Adapters, fx.Module("jwt",
 	fx.Provide(
 		New,
 		func(i *Issuer) auth.AccessTokens { return i },
 	),
-)
+))
 
 const (
 	issuer   = "oneboard"

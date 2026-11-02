@@ -21,6 +21,7 @@ import (
 	"github.com/DmytroFrame/oneboard/backend/internal/config"
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
 	"github.com/DmytroFrame/oneboard/backend/internal/health"
+	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/attachment"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/auth"
@@ -34,7 +35,7 @@ import (
 )
 
 // Module provides the pool, the transactor and every repository bound to the ports that use it.
-var Module = fx.Module("postgres",
+var Module = modules.Register(modules.Adapters, fx.Module("postgres",
 	health.Provide(func(db *DB) health.Check { return health.Check{Name: "postgres", Run: db.pool.Ping} }),
 	fx.Provide(
 		NewDB,
@@ -75,7 +76,7 @@ var Module = fx.Module("postgres",
 
 		func(r *DashboardRepo) dashboard.Reader { return r },
 	),
-)
+))
 
 //go:embed migrations/*.sql
 var migrations embed.FS

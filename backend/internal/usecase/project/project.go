@@ -11,10 +11,11 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase"
 )
 
-var Module = fx.Module("project", fx.Provide(NewService))
+var Module = modules.Register(modules.UseCases, fx.Module("project", fx.Provide(NewService)))
 
 var keyRe = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
 

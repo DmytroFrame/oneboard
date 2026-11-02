@@ -6,7 +6,7 @@ Go (Clean Architecture) + React/TypeScript, backed by PostgreSQL, Redis, OpenSea
 Repository: <https://github.com/DmytroFrame/oneboard>
 
 ```
-backend/   Go: chi (HTTP), uber/fx (DI), PostgreSQL (pgx + goose), JWT + Redis (sessions, pub/sub),
+backend/   Go: Echo v5 (HTTP), uber/fx (DI), PostgreSQL (pgx + goose), JWT + Redis (sessions, pub/sub),
            OpenSearch (card search), S3 / RustFS (avatars, attachments), WebSocket (real time)
 frontend/  Vite + React + TypeScript + react-router + i18next + TipTap/Yjs: landing "/", sign-in/up,
            home "/home", organizations "/orgs/:id", boards "/projects/:id", settings "/settings"
@@ -127,15 +127,38 @@ backend/
       jwttoken/            issuing and verifying access tokens (HS256)
       imagethumb/          image thumbnails
       bcrypthash/          password hashing
-    transport/httpapi/     chi router, middleware, DTOs/presenter, handlers per module, WebSocket hub
+    transport/httpapi/     Echo router, middleware, DTOs/presenter, handlers per module, WebSocket hub
+    modules/               registry of fx modules by namespace (core, adapters, usecases, transport, http.routes)
     health/                readiness checks contributed by adapters
     config/                settings from the environment and ../.env
-    app/                   composition root: wires all fx modules
+    app/                   composition root: assembles the registered modules
 ```
 
-Every package exports an `fx.Module`. Adapters bind themselves to the ports they satisfy, e.g.
-`func(r *CardRepo) board.Cards { return r }`; HTTP handlers join the `routes` group and the server mounts
-them all. Replacing an implementation (say, search) means wiring a different module in `internal/app`.
+**Modules register themselves.** Each package declares its module where it lives and puts it into a
+namespace of `internal/modules`:
+
+```go
+var Module = modules.Register(modules.Adapters, fx.Module("postgres",
+    fx.Provide(NewDB, NewCardRepo, …,
+        func(r *CardRepo) board.Cards { return r }, // adapters bind themselves to the ports they satisfy
+    ),
+))
+```
+
+HTTP handlers do the same, one line per file, in the `http.routes` namespace:
+
+```go
+func init() { registerRoutes(NewCardHandler) } // CardHandler.Mount(public, private *echo.Group)
+```
+
+`internal/app` assembles the application from whole namespaces (`modules.All()`) and doesn't list
+modules or routes. The only list is `internal/app/link.go`: blank imports, because a Go package's
+registration only runs if the package is linked in. A test validates the complete DI graph
+(`fx.ValidateApp`) without any infrastructure, so a missing binding fails `go test`, not the deploy.
+
+**HTTP** is Echo v5. Handlers return errors; one error handler turns use case errors (`domain.Error`) and
+the transport's own (`invalid_json`, `invalid_id`, `not_found`, `method_not_allowed`) into
+`{"error", "code"}`. Unexpected errors are logged and answered with `internal`.
 
 PostgreSQL is the source of truth. OpenSearch only returns the IDs of matching cards; sorting, filtering
 and cursor pagination happen in Postgres. On start the index is compared with the database and rebuilt

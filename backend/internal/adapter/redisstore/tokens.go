@@ -19,13 +19,14 @@ import (
 	"github.com/DmytroFrame/oneboard/backend/internal/config"
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
 	"github.com/DmytroFrame/oneboard/backend/internal/health"
+	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/auth"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/collab"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/voice"
 )
 
-var Module = fx.Module("redis",
+var Module = modules.Register(modules.Adapters, fx.Module("redis",
 	health.Provide(func(c *redis.Client) health.Check {
 		return health.Check{Name: "redis", Run: func(ctx context.Context) error { return c.Ping(ctx).Err() }}
 	}),
@@ -47,7 +48,7 @@ var Module = fx.Module("redis",
 		func(v *VoiceRooms) voice.Rooms { return v },
 		func(b *Bus) voice.Signals { return b },
 	),
-)
+))
 
 func NewClient(lc fx.Lifecycle, cfg config.Config) (*redis.Client, error) {
 	opts := &redis.Options{Addr: cfg.RedisAddr, Username: cfg.RedisUsername, Password: cfg.RedisPassword, DB: cfg.RedisDB}

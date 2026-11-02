@@ -7,10 +7,11 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase"
 )
 
-var Module = fx.Module("board", fx.Provide(NewColumnService, NewCardService))
+var Module = modules.Register(modules.UseCases, fx.Module("board", fx.Provide(NewColumnService, NewCardService)))
 
 type Columns interface {
 	List(ctx context.Context, projectID int64) ([]domain.Column, error)

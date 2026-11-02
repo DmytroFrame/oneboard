@@ -11,10 +11,11 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase"
 )
 
-var Module = fx.Module("collab", fx.Provide(NewService))
+var Module = modules.Register(modules.UseCases, fx.Module("collab", fx.Provide(NewService)))
 
 // PresenceTTL is how long a peer stays listed without a heartbeat (e.g. after a server crash).
 const PresenceTTL = 60 * time.Second

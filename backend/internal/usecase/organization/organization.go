@@ -12,10 +12,11 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase"
 )
 
-var Module = fx.Module("organization", fx.Provide(NewService))
+var Module = modules.Register(modules.UseCases, fx.Module("organization", fx.Provide(NewService)))
 
 type Organizations interface {
 	ListForUser(ctx context.Context, userID int64) ([]domain.Organization, error)

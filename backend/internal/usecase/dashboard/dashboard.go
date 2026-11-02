@@ -7,9 +7,10 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 )
 
-var Module = fx.Module("dashboard", fx.Provide(NewService))
+var Module = modules.Register(modules.UseCases, fx.Module("dashboard", fx.Provide(NewService)))
 
 const assignedLimit = 8
 

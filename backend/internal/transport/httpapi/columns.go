@@ -4,11 +4,13 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/labstack/echo/v5"
 
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/board"
 )
+
+func init() { registerRoutes(NewColumnHandler) }
 
 type ColumnHandler struct {
 	columns *board.ColumnService
@@ -18,86 +20,85 @@ func NewColumnHandler(columns *board.ColumnService) *ColumnHandler {
 	return &ColumnHandler{columns: columns}
 }
 
-func (h *ColumnHandler) Mount(_, private chi.Router) {
-	private.Get("/projects/{id}/columns", h.list)
-	private.Post("/projects/{id}/columns", h.create)
-	private.Put("/columns/{id}", h.rename)
-	private.Post("/columns/{id}/move", h.move)
-	private.Delete("/columns/{id}", h.delete)
+func (h *ColumnHandler) Mount(_, private *echo.Group) {
+	private.GET("/projects/:id/columns", h.list)
+	private.POST("/projects/:id/columns", h.create)
+	private.PUT("/columns/:id", h.rename)
+	private.POST("/columns/:id/move", h.move)
+	private.DELETE("/columns/:id", h.delete)
 }
 
 type columnInput struct {
 	Name string `json:"name"`
 }
 
-func (h *ColumnHandler) respond(w http.ResponseWriter, r *http.Request, status int, cols []domain.Column, err error) {
+func respondColumns(c *echo.Context, status int, cols []domain.Column, err error) error {
 	if err != nil {
-		fail(w, r, err)
-		return
+		return err
 	}
-	writeJSON(w, status, toColumns(cols))
+	return c.JSON(status, toColumns(cols))
 }
 
-func (h *ColumnHandler) list(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
+func (h *ColumnHandler) list(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
 	}
-	cols, err := h.columns.List(r.Context(), currentUser(r).ID, id)
-	h.respond(w, r, http.StatusOK, cols, err)
+	cols, err := h.columns.List(c.Request().Context(), currentUser(c).ID, id)
+	return respondColumns(c, http.StatusOK, cols, err)
 }
 
-func (h *ColumnHandler) create(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
+func (h *ColumnHandler) create(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
 	}
 	var in columnInput
-	if !decode(w, r, &in) {
-		return
+	if err := bind(c, &in); err != nil {
+		return err
 	}
-	cols, err := h.columns.Create(r.Context(), currentUser(r).ID, id, in.Name)
-	h.respond(w, r, http.StatusCreated, cols, err)
+	cols, err := h.columns.Create(c.Request().Context(), currentUser(c).ID, id, in.Name)
+	return respondColumns(c, http.StatusCreated, cols, err)
 }
 
-func (h *ColumnHandler) rename(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
+func (h *ColumnHandler) rename(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
 	}
 	var in columnInput
-	if !decode(w, r, &in) {
-		return
+	if err := bind(c, &in); err != nil {
+		return err
 	}
-	cols, err := h.columns.Rename(r.Context(), currentUser(r).ID, id, in.Name)
-	h.respond(w, r, http.StatusOK, cols, err)
+	cols, err := h.columns.Rename(c.Request().Context(), currentUser(c).ID, id, in.Name)
+	return respondColumns(c, http.StatusOK, cols, err)
 }
 
-func (h *ColumnHandler) move(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
+func (h *ColumnHandler) move(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
 	}
 	var in struct {
 		Index int `json:"index"`
 	}
-	if !decode(w, r, &in) {
-		return
+	if err := bind(c, &in); err != nil {
+		return err
 	}
-	cols, err := h.columns.Move(r.Context(), currentUser(r).ID, id, in.Index)
-	h.respond(w, r, http.StatusOK, cols, err)
+	cols, err := h.columns.Move(c.Request().Context(), currentUser(c).ID, id, in.Index)
+	return respondColumns(c, http.StatusOK, cols, err)
 }
 
 // delete takes ?moveTo=<columnId>, required when the column still has cards.
-func (h *ColumnHandler) delete(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id")
-	if !ok {
-		return
+func (h *ColumnHandler) delete(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
 	}
 	var moveTo *int64
-	if v, err := strconv.ParseInt(r.URL.Query().Get("moveTo"), 10, 64); err == nil {
+	if v, err := strconv.ParseInt(c.QueryParam("moveTo"), 10, 64); err == nil {
 		moveTo = &v
 	}
-	cols, err := h.columns.Delete(r.Context(), currentUser(r).ID, id, moveTo)
-	h.respond(w, r, http.StatusOK, cols, err)
+	cols, err := h.columns.Delete(c.Request().Context(), currentUser(c).ID, id, moveTo)
+	return respondColumns(c, http.StatusOK, cols, err)
 }

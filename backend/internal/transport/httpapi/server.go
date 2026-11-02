@@ -1,5 +1,6 @@
-// Package httpapi is the REST transport on top of chi. Each feature contributes a Routes
-// implementation through the "routes" fx group; the server mounts them all.
+// Package httpapi is the REST + WebSocket transport on top of Echo. Every handler registers itself
+// (registerRoutes in its own file's init) in the modules.Routes namespace; the router mounts whatever
+// was registered.
 package httpapi
 
 import (
@@ -10,79 +11,84 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	"github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
 	"go.uber.org/fx"
 
 	"github.com/DmytroFrame/oneboard/backend/internal/config"
 	"github.com/DmytroFrame/oneboard/backend/internal/health"
+	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 )
 
-var Module = fx.Module("http",
+var Module = modules.Register(modules.Transport, fx.Module("http",
 	fx.Provide(
 		NewMiddleware,
 		NewPresenter,
-		asRoutes(NewAuthHandler),
-		asRoutes(NewUserHandler),
-		asRoutes(NewProjectHandler),
-		asRoutes(NewColumnHandler),
-		asRoutes(NewCardHandler),
-		asRoutes(NewOrgHandler),
-		asRoutes(NewAttachmentHandler),
-		asRoutes(NewDashboardHandler),
-		asRoutes(NewVoiceHandler),
-		asRoutes(NewHub),
-		fx.Annotate(NewRouter, fx.ParamTags(``, ``, `group:"routes"`, `group:"health"`)),
+		fx.Annotate(NewRouter, fx.ParamTags(``, ``, ``, `group:"routes"`, `group:"health"`)),
 	),
 	fx.Invoke(StartServer),
-)
+))
 
 // Routes registers a feature's endpoints. public is open to everyone, private requires a session.
+// Both are mounted under /api.
 type Routes interface {
-	Mount(public, private chi.Router)
+	Mount(public, private *echo.Group)
 }
 
-func asRoutes(constructor any) any {
-	return fx.Annotate(constructor, fx.As(new(Routes)), fx.ResultTags(`group:"routes"`))
+// registerRoutes adds a handler constructor to the router. Each handler file calls it from init, so
+// a new feature only touches its own file.
+func registerRoutes(constructor any) {
+	modules.Register(modules.Routes, fx.Provide(
+		fx.Annotate(constructor, fx.As(new(Routes)), fx.ResultTags(`group:"routes"`)),
+	))
 }
 
-func NewRouter(cfg config.Config, mw *Middleware, routes []Routes, checks []health.Check) http.Handler {
-	r := chi.NewRouter()
-	r.Use(middleware.RealIP, middleware.Recoverer)
+func NewRouter(cfg config.Config, mw *Middleware, log *slog.Logger, routes []Routes, checks []health.Check) http.Handler {
+	e := echo.NewWithConfig(echo.Config{
+		Logger:           log,
+		HTTPErrorHandler: errorHandler,
+		// Groups would otherwise add catch-all 404 routes running their middleware, so an unknown path
+		// under the private group would answer 401 and a wrong method 404 instead of 405.
+		NoGroupAutoRegister404Routes: true,
+	})
+	e.Use(middleware.Recover())
 
 	// Liveness: the process answers. Readiness: Postgres and Redis answer too (ALB / ECS health checks).
-	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
-	r.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	e.GET("/healthz", func(c *echo.Context) error { return c.NoContent(http.StatusOK) })
+	e.GET("/readyz", func(c *echo.Context) error {
+		ctx, cancel := context.WithTimeout(c.Request().Context(), 2*time.Second)
 		defer cancel()
 		status, result := http.StatusOK, map[string]string{}
-		for _, c := range checks {
-			if err := c.Run(ctx); err != nil {
-				status, result[c.Name] = http.StatusServiceUnavailable, err.Error()
+		for _, check := range checks {
+			if err := check.Run(ctx); err != nil {
+				status, result[check.Name] = http.StatusServiceUnavailable, err.Error()
 			} else {
-				result[c.Name] = "ok"
+				result[check.Name] = "ok"
 			}
 		}
-		writeJSON(w, status, result)
+		return c.JSON(status, result)
 	})
 
-	r.Route("/api", func(api chi.Router) {
-		api.Use(mw.Log)
-		public, private := api.With(), api.With(mw.RequireAuth)
-		for _, rt := range routes {
-			rt.Mount(public, private)
+	api := e.Group("/api", mw.Log)
+	private := api.Group("", mw.RequireAuth)
+	for _, rt := range routes {
+		rt.Mount(api, private)
+	}
+
+	// Everything else is the SPA, except unknown API paths, which stay JSON 404s.
+	spa := spaHandler(cfg.StaticDir)
+	fallback := func(c *echo.Context) error {
+		if p := c.Request().URL.Path; p == "/api" || strings.HasPrefix(p, "/api/") {
+			return errNotFound
 		}
-		api.NotFound(func(w http.ResponseWriter, r *http.Request) {
-			writeError(w, http.StatusNotFound, "not_found", "Not found")
-		})
-		api.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed")
-		})
-	})
-	r.Handle("/*", spaHandler(cfg.StaticDir))
-	return r
+		return spa(c)
+	}
+	e.GET("/*", fallback)
+	e.HEAD("/*", fallback)
+	return e
 }
 
 // StartServer serves plain HTTP on cfg.Addr, or — when a certificate is configured and found —

@@ -17,10 +17,11 @@ import (
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
 
+	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/attachment"
 )
 
-var Module = fx.Module("thumbnails", fx.Provide(func() attachment.Thumbnailer { return Thumbnailer{} }))
+var Module = modules.Register(modules.Adapters, fx.Module("thumbnails", fx.Provide(func() attachment.Thumbnailer { return Thumbnailer{} })))
 
 const (
 	maxSide = 480 // card covers are ~240 CSS px wide; 2x for retina

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/go-chi/chi/v5"
+	"github.com/labstack/echo/v5"
 	"go.uber.org/fx"
 
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
@@ -86,6 +86,8 @@ func (c *wsClient) setVoice(projectID int64, muted bool) {
 	c.mu.Unlock()
 }
 
+func init() { registerRoutes(NewHub) }
+
 func NewHub(lc fx.Lifecycle, c *collab.Service, v *voice.Service, present *Presenter, log *slog.Logger) *Hub {
 	h := &Hub{
 		collab: c, voice: v, present: present, log: log,
@@ -115,8 +117,8 @@ func NewHub(lc fx.Lifecycle, c *collab.Service, v *voice.Service, present *Prese
 	return h
 }
 
-func (h *Hub) Mount(public, _ chi.Router) {
-	public.Get("/ws", h.serve) // authenticated by the first message
+func (h *Hub) Mount(public, _ *echo.Group) {
+	public.GET("/ws", echo.WrapHandler(http.HandlerFunc(h.serve))) // authenticated by the first message
 }
 
 // ---------- rooms ----------
