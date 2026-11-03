@@ -118,13 +118,11 @@ func (h *OrgHandler) changeRole(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	var in struct {
-		Role domain.OrgRole `json:"role"`
-	}
+	var in roleRequest
 	if err := bind(c, &in); err != nil {
 		return err
 	}
-	ms, err := h.orgs.ChangeRole(c.Request().Context(), currentUser(c).ID, id, target, in.Role)
+	ms, err := h.orgs.ChangeRole(c.Request().Context(), currentUser(c).ID, id, target, in.Role, in.AdditionRoles)
 	if err != nil {
 		return err
 	}
@@ -167,8 +165,8 @@ func (h *OrgHandler) invite(c *echo.Context) error {
 		return err
 	}
 	var in struct {
-		Email string         `json:"email"`
-		Role  domain.OrgRole `json:"role"`
+		Email string             `json:"email"`
+		Role  domain.CompanyRole `json:"role"`
 	}
 	if err := bind(c, &in); err != nil {
 		return err

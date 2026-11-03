@@ -1,0 +1,91 @@
+.wrap {
+  --series-hired: #007aff;
+  --series-dismissed: #eb6834;
+
+  @include dark {
+    --series-hired: #0a84ff;
+    --series-dismissed: #d95926;
+  }
+}
+
+.legend {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--text-subtle);
+  margin-bottom: 4px;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+}
+
+.hiredKey,
+.dismissedKey {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.hiredKey {
+  background: var(--series-hired);
+}
+
+.dismissedKey {
+  background: var(--series-dismissed);
+}
+
+.chart {
+  position: relative;
+
+  svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+}
+
+.grid {
+  stroke: var(--separator);
+}
+
+.tick {
+  font-size: 11px;
+  fill: var(--text-subtle);
+}
+
+.hit {
+  fill: transparent;
+}
+
+.hired {
+  fill: var(--series-hired);
+}
+
+.dismissed {
+  fill: var(--series-dismissed);
+}
+
+.tooltip {
+  @include glass-panel;
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+
+  span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+}

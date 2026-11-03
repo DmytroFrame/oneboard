@@ -5,6 +5,8 @@ import (
 
 	"github.com/labstack/echo/v5"
 
+	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/project"
 )
 
@@ -27,6 +29,64 @@ func (h *ProjectHandler) Mount(_, private *echo.Group) {
 	private.GET("/projects/:id/members", h.members)
 	private.POST("/projects/:id/members", h.addMember)
 	private.DELETE("/projects/:id/members/:userId", h.removeMember)
+	private.PUT("/projects/:id/members/:userId", h.setMemberRole)
+	private.PUT("/projects/:id/settings", h.updateSettings)
+	private.PUT("/projects/:id/pin", h.pin)
+}
+
+func (h *ProjectHandler) updateSettings(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
+	}
+	var in projectSettingsDTO
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	p, err := h.projects.UpdateSettings(c.Request().Context(), currentUser(c), id, domain.ProjectSettings(in))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, toProject(p))
+}
+
+func (h *ProjectHandler) pin(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
+	}
+	var in struct {
+		Pinned bool `json:"pinned"`
+	}
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	if err := h.projects.SetPinned(c.Request().Context(), currentUser(c), id, in.Pinned); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (h *ProjectHandler) setMemberRole(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
+	}
+	userID, err := pathID(c, "userId")
+	if err != nil {
+		return err
+	}
+	var in struct {
+		Role domain.Role `json:"role"`
+	}
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	ms, err := h.projects.SetMemberRole(c.Request().Context(), currentUser(c), id, userID, in.Role)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, h.present.Members(ms))
 }
 
 type projectInput struct {
@@ -35,8 +95,17 @@ type projectInput struct {
 	Key            string `json:"key"`
 }
 
+// list: the user's projects in the current organization; ?all=1 adds every other project there for
+// those with viewAllProjects.
 func (h *ProjectHandler) list(c *echo.Context) error {
-	ps, err := h.projects.List(c.Request().Context(), currentUser(c).ID)
+	if c.QueryParam("all") == "1" {
+		ps, err := h.projects.ListAll(c.Request().Context(), currentUser(c))
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, mapSlice(ps, toProject))
+	}
+	ps, err := h.projects.List(c.Request().Context(), currentUser(c))
 	if err != nil {
 		return err
 	}

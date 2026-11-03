@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
+import { CompanyWidgets } from "@/components/CompanyWidgets/CompanyWidgets";
 import { EmptyState } from "@/components/EmptyState/EmptyState";
+import { HolidaysPanel } from "@/components/HolidaysPanel/HolidaysPanel";
 import { OrgBadge } from "@/components/OrgBadge/OrgBadge";
 import { Page } from "@/components/Page/Page";
 import { PriorityIcon } from "@/components/PriorityIcon/PriorityIcon";
 import { ProjectCard } from "@/components/ProjectCard/ProjectCard";
 import { ProjectGrid } from "@/components/ProjectCard/ProjectGrid";
+import { WorkTimeChart } from "@/components/WorkTimeChart/WorkTimeChart";
 import { RoleChip } from "@/components/RoleChip/RoleChip";
 import { Banner } from "@/components/ui/Banner/Banner";
 import { Button } from "@/components/ui/Button/Button";
@@ -18,6 +21,19 @@ import { api } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import type { Dashboard } from "@/types";
 import s from "./Home.module.scss";
+
+/** Company-wide widgets: headcount, people dates, the work-time chart and public holidays. */
+function CompanySection() {
+  return (
+    <>
+      <CompanyWidgets />
+      <div className={s.columns}>
+        <WorkTimeChart />
+        <HolidaysPanel />
+      </div>
+    </>
+  );
+}
 
 /** The signed-in user's start page: stats, their tasks, projects and organizations. */
 export default function Home() {
@@ -58,6 +74,7 @@ export default function Home() {
             </Button>
           }
         />
+        <CompanySection />
       </Page>
     );
   }
@@ -112,12 +129,14 @@ export default function Home() {
                     {t("home.members", { count: o.memberCount })} · {t("home.projectsCount", { count: o.projectCount })}
                   </small>
                 </span>
-                <RoleChip role={o.role} label={t(`orgRoles.${o.role}`)} />
+                <RoleChip role={o.role} label={t(`companyRoles.${o.role}`)} />
               </Link>
             ))}
           </div>
         </Panel>
       </div>
+
+      <CompanySection />
 
       <section>
         <div className={s.sectionHead}>

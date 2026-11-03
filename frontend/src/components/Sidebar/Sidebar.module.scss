@@ -40,6 +40,15 @@
   color: var(--text-faint);
   padding: 0 10px 6px;
   margin-top: 14px;
+  text-decoration: none;
+
+  &:hover {
+    color: var(--text-subtle);
+  }
+}
+
+.titleActive {
+  color: var(--accent);
 }
 
 // ---------- Home / Settings ----------
@@ -68,51 +77,12 @@
   color: var(--text);
 }
 
-// ---------- organizations ----------
-
-.orgList {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.orgLink {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 7px 10px;
-  border-radius: var(--r-md);
-  color: var(--text);
-  text-decoration: none;
-  font-size: 14px;
-  font-weight: 650;
-  border: 1px solid transparent;
-  transition: background 0.2s;
-
-  &:hover {
-    background: var(--hover);
-  }
-}
-
-.orgLinkActive {
-  @include glass-selected;
-}
-
-.orgName {
-  @include ellipsis;
-  flex: 1;
-  min-width: 0;
-}
-
-// ---------- projects of an organization ----------
+// ---------- the current organization's projects ----------
 
 .projectList {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  margin: 3px 0 0 14px;
-  padding-left: 8px;
-  border-left: 1px solid var(--separator);
 }
 
 .projectLink {
@@ -166,7 +136,12 @@
   }
 }
 
-.sidebar .addOrg {
-  justify-content: flex-start;
-  margin-top: 6px;
+/* Something needs attention in that section. */
+.dot {
+  width: 8px;
+  height: 8px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--danger);
+  flex: none;
 }

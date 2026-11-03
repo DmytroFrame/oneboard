@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/mail"
+	"slices"
 	"strings"
 
 	"go.uber.org/fx"
@@ -21,17 +22,19 @@ var Module = modules.Register(modules.UseCases, fx.Module("organization", fx.Pro
 type Organizations interface {
 	ListForUser(ctx context.Context, userID int64) ([]domain.Organization, error)
 	GetForUser(ctx context.Context, orgID, userID int64) (domain.Organization, error) // ErrNoRows for non-members
-	Create(ctx context.Context, name string, createdBy int64) (int64, error)
+	// Found creates an organization owned by its creator, with the default reference lists.
+	Found(ctx context.Context, name string, ownerID int64) (int64, error)
 	Rename(ctx context.Context, orgID int64, name string) error
 	Delete(ctx context.Context, orgID int64) error
 	ProjectIDs(ctx context.Context, orgID int64) ([]int64, error)
 }
 
 type Members interface {
-	Role(ctx context.Context, orgID, userID int64) (domain.OrgRole, error) // OrgRoleNone for non-members
+	// Membership is the user's place in the organization; domain.ErrNoRows for outsiders.
+	Membership(ctx context.Context, orgID, userID int64) (domain.Membership, error)
 	List(ctx context.Context, orgID int64) ([]domain.OrgMember, error)
-	Add(ctx context.Context, orgID, userID int64, role domain.OrgRole) error // ErrDuplicate if already a member
-	SetRole(ctx context.Context, orgID, userID int64, role domain.OrgRole) error
+	Add(ctx context.Context, orgID, userID int64, role domain.CompanyRole) error // ErrDuplicate if already a member
+	SetRole(ctx context.Context, orgID, userID int64, role domain.CompanyRole, additions []domain.AdditionRole) error
 	Remove(ctx context.Context, orgID, userID int64) error
 	CountOwners(ctx context.Context, orgID int64) (int, error)
 	// FirstOwnerExcept returns the longest-standing owner other than userID.
@@ -40,8 +43,8 @@ type Members interface {
 
 type Invitations interface {
 	List(ctx context.Context, orgID int64) ([]domain.Invitation, error)
-	Create(ctx context.Context, orgID int64, email string, role domain.OrgRole, invitedBy int64) error // ErrDuplicate
-	Delete(ctx context.Context, orgID, invitationID int64) error                                       // ErrNoRows
+	Create(ctx context.Context, orgID int64, email string, role domain.CompanyRole, invitedBy int64) error // ErrDuplicate
+	Delete(ctx context.Context, orgID, invitationID int64) error                                           // ErrNoRows
 }
 
 type Users interface {
@@ -124,16 +127,17 @@ func (s *Service) tellMembers(ctx context.Context, orgID, actorID int64) {
 	}
 }
 
-// role returns the user's role, or ErrOrgNotFound for outsiders (who can't tell it exists).
-func (s *Service) role(ctx context.Context, orgID, userID int64) (domain.OrgRole, error) {
-	role, err := s.members.Role(ctx, orgID, userID)
+// member returns the user as a member of the organization, or ErrOrgNotFound for outsiders (who
+// can't tell it exists) and people whose membership is inactive.
+func (s *Service) member(ctx context.Context, orgID, userID int64) (domain.User, error) {
+	m, err := s.members.Membership(ctx, orgID, userID)
 	if err != nil {
-		return "", err
+		return domain.User{}, usecase.NotFoundAs(err, domain.ErrOrgNotFound)
 	}
-	if role == domain.OrgRoleNone {
-		return "", domain.ErrOrgNotFound
+	if !m.Active {
+		return domain.User{}, domain.ErrOrgNotFound
 	}
-	return role, nil
+	return domain.User{ID: userID}.In(m), nil
 }
 
 func (s *Service) List(ctx context.Context, userID int64) ([]domain.Organization, error) {
@@ -145,7 +149,7 @@ func (s *Service) Get(ctx context.Context, userID, orgID int64) (domain.Organiza
 	return o, usecase.NotFoundAs(err, domain.ErrOrgNotFound)
 }
 
-// Create makes an organization owned by userID. Anyone can create one.
+// Create makes an organization owned by userID, isolated from every other one. Anyone signed in can.
 func (s *Service) Create(ctx context.Context, userID int64, name string) (domain.Organization, error) {
 	name, err := domain.NormalizeOrgName(name)
 	if err != nil {
@@ -153,10 +157,8 @@ func (s *Service) Create(ctx context.Context, userID int64, name string) (domain
 	}
 	var id int64
 	err = s.tx.WithinTx(ctx, func(ctx context.Context) error {
-		if id, err = s.orgs.Create(ctx, name, userID); err != nil {
-			return err
-		}
-		return s.members.Add(ctx, id, userID, domain.OrgRoleOwner)
+		id, err = s.orgs.Found(ctx, name, userID)
+		return err
 	})
 	if err != nil {
 		return domain.Organization{}, err
@@ -165,11 +167,11 @@ func (s *Service) Create(ctx context.Context, userID int64, name string) (domain
 }
 
 func (s *Service) Rename(ctx context.Context, userID, orgID int64, name string) (domain.Organization, error) {
-	role, err := s.role(ctx, orgID, userID)
+	actor, err := s.member(ctx, orgID, userID)
 	if err != nil {
 		return domain.Organization{}, err
 	}
-	if !role.CanRename() {
+	if !actor.ManagesOrg() {
 		return domain.Organization{}, domain.ErrOrgAdminOnly
 	}
 	if name, err = domain.NormalizeOrgName(name); err != nil {
@@ -191,11 +193,11 @@ func (s *Service) Rename(ctx context.Context, userID, orgID int64, name string) 
 
 // Delete removes the organization with all its projects, cards and files.
 func (s *Service) Delete(ctx context.Context, userID, orgID int64) error {
-	role, err := s.role(ctx, orgID, userID)
+	actor, err := s.member(ctx, orgID, userID)
 	if err != nil {
 		return err
 	}
-	if !role.CanDelete() {
+	if actor.Role != domain.CompanyOwner {
 		return domain.ErrOrgOwnerOnly
 	}
 	org, err := s.orgs.GetForUser(ctx, orgID, userID)
@@ -236,7 +238,7 @@ func (s *Service) Delete(ctx context.Context, userID, orgID int64) error {
 }
 
 func (s *Service) Members(ctx context.Context, userID, orgID int64) ([]domain.OrgMember, error) {
-	if _, err := s.role(ctx, orgID, userID); err != nil {
+	if _, err := s.member(ctx, orgID, userID); err != nil {
 		return nil, err
 	}
 	return s.members.List(ctx, orgID)
@@ -247,18 +249,18 @@ type InviteResult struct {
 	Added bool
 }
 
-func (s *Service) Invite(ctx context.Context, userID, orgID int64, email string, role domain.OrgRole) (InviteResult, error) {
-	actor, err := s.role(ctx, orgID, userID)
+func (s *Service) Invite(ctx context.Context, userID, orgID int64, email string, role domain.CompanyRole) (InviteResult, error) {
+	actor, err := s.member(ctx, orgID, userID)
 	if err != nil {
 		return InviteResult{}, err
 	}
-	if !actor.CanInvite() {
+	if !actor.Can(domain.PermAddUser) {
 		return InviteResult{}, domain.ErrOrgAdminOnly
 	}
 	if !role.Valid() {
 		return InviteResult{}, domain.ErrOrgRoleInvalid
 	}
-	if !actor.CanGrant(role) {
+	if !actor.CanInviteAs(role) {
 		return InviteResult{}, domain.ErrOrgRoleForbidden
 	}
 	email = strings.ToLower(strings.TrimSpace(email))
@@ -294,52 +296,53 @@ func (s *Service) Invite(ctx context.Context, userID, orgID int64, email string,
 }
 
 func (s *Service) Invitations(ctx context.Context, userID, orgID int64) ([]domain.Invitation, error) {
-	role, err := s.role(ctx, orgID, userID)
+	actor, err := s.member(ctx, orgID, userID)
 	if err != nil {
 		return nil, err
 	}
-	if !role.CanInvite() {
+	if !actor.Can(domain.PermAddUser) {
 		return nil, domain.ErrOrgAdminOnly
 	}
 	return s.invitations.List(ctx, orgID)
 }
 
 func (s *Service) RevokeInvitation(ctx context.Context, userID, orgID, invitationID int64) error {
-	role, err := s.role(ctx, orgID, userID)
+	actor, err := s.member(ctx, orgID, userID)
 	if err != nil {
 		return err
 	}
-	if !role.CanInvite() {
+	if !actor.Can(domain.PermAddUser) {
 		return domain.ErrOrgAdminOnly
 	}
 	return usecase.NotFoundAs(s.invitations.Delete(ctx, orgID, invitationID), domain.ErrInvitationNotFound)
 }
 
-func (s *Service) ChangeRole(ctx context.Context, userID, orgID, targetID int64, role domain.OrgRole) ([]domain.OrgMember, error) {
-	actor, err := s.role(ctx, orgID, userID)
+// ChangeRole sets a member's company role in the organization and, when additions is not nil, their
+// addition roles (domain.CheckRoleChange); the organization always keeps an owner.
+func (s *Service) ChangeRole(ctx context.Context, userID, orgID, targetID int64, role domain.CompanyRole, additions []domain.AdditionRole) ([]domain.OrgMember, error) {
+	actor, err := s.member(ctx, orgID, userID)
 	if err != nil {
 		return nil, err
 	}
-	if !actor.CanManageRoles() {
-		return nil, domain.ErrOrgOwnerOnly
-	}
-	if !role.Valid() {
-		return nil, domain.ErrOrgRoleInvalid
-	}
 	err = s.tx.WithinTx(ctx, func(ctx context.Context) error {
-		current, err := s.members.Role(ctx, orgID, targetID)
+		m, err := s.members.Membership(ctx, orgID, targetID)
 		if err != nil {
+			return usecase.NotFoundAs(err, domain.ErrOrgMemberNotFound)
+		}
+		target := domain.User{ID: targetID}.In(m)
+		target.Role, target.AdditionRoles = m.Role, m.AdditionRoles // judge by the role even if inactive
+		if err := domain.CheckRoleChange(actor, target, role, additions); err != nil {
 			return err
 		}
-		if current == domain.OrgRoleNone {
-			return domain.ErrOrgMemberNotFound
-		}
-		if current == domain.OrgRoleOwner && role != domain.OrgRoleOwner {
+		if m.Role == domain.CompanyOwner && role != domain.CompanyOwner {
 			if err := s.ensureAnotherOwner(ctx, orgID); err != nil {
 				return err
 			}
 		}
-		return s.members.SetRole(ctx, orgID, targetID, role)
+		if additions == nil {
+			additions = m.AdditionRoles
+		}
+		return s.members.SetRole(ctx, orgID, targetID, role, additions)
 	})
 	if err != nil {
 		return nil, err
@@ -347,6 +350,7 @@ func (s *Service) ChangeRole(ctx context.Context, userID, orgID, targetID int64,
 	if org, err := s.orgs.GetForUser(ctx, orgID, targetID); err == nil {
 		s.tellUser(ctx, targetID, userID, domain.AccessRole, org)
 	}
+	s.userEvents.PublishUser(ctx, domain.UserEvent{Type: domain.UserAccountChanged, UserID: targetID, OrgID: orgID, ActorID: userID})
 	s.tellMembers(ctx, orgID, userID)
 	return s.members.List(ctx, orgID)
 }
@@ -365,7 +369,7 @@ func (s *Service) ensureAnotherOwner(ctx context.Context, orgID int64) error {
 // RemoveMember removes targetID from the organization (or lets a member leave when targetID == userID).
 // They lose access to all of its projects; projects they owned go to whoever stays responsible.
 func (s *Service) RemoveMember(ctx context.Context, userID, orgID, targetID int64) error {
-	actor, err := s.role(ctx, orgID, userID)
+	actor, err := s.member(ctx, orgID, userID)
 	if err != nil {
 		return err
 	}
@@ -378,17 +382,15 @@ func (s *Service) RemoveMember(ctx context.Context, userID, orgID, targetID int6
 		return err
 	}
 	err = s.tx.WithinTx(ctx, func(ctx context.Context) error {
-		target, err := s.members.Role(ctx, orgID, targetID)
+		m, err := s.members.Membership(ctx, orgID, targetID)
 		if err != nil {
-			return err
+			return usecase.NotFoundAs(err, domain.ErrOrgMemberNotFound)
 		}
-		if target == domain.OrgRoleNone {
-			return domain.ErrOrgMemberNotFound
-		}
-		if targetID != userID && !actor.CanRemove(target) {
+		// Removing someone else takes fireUser and the right to have given them their role.
+		if targetID != userID && (!actor.Can(domain.PermFireUser) || (m.Role != domain.CompanyCandidate && !slices.Contains(actor.AssignableRoles(), m.Role))) {
 			return domain.ErrRemoveForbidden
 		}
-		if target == domain.OrgRoleOwner {
+		if m.Role == domain.CompanyOwner {
 			if err := s.ensureAnotherOwner(ctx, orgID); err != nil {
 				return err
 			}

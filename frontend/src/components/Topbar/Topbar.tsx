@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { Avatar } from "@/components/Avatar/Avatar";
 import { Logo } from "@/components/Logo/Logo";
 import { Button } from "@/components/ui/Button/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog/ConfirmDialog";
 import { IconButton } from "@/components/ui/IconButton/IconButton";
 import { MenuIcon } from "@/components/ui/icons";
 import { Spacer } from "@/components/ui/Spacer/Spacer";
@@ -19,6 +21,7 @@ export function Topbar({ drawerOpen, onToggleDrawer }: Props) {
   const { t } = useTranslation();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [confirmLogout, setConfirmLogout] = useState(false);
   return (
     <header className={s.topbar}>
       <IconButton className={s.menuToggle} aria-label={t("nav.menu")} aria-expanded={drawerOpen} onClick={onToggleDrawer}>
@@ -29,10 +32,19 @@ export function Topbar({ drawerOpen, onToggleDrawer }: Props) {
       <div className={s.user}>
         <Avatar user={user} size={30} onClick={() => navigate("/settings")} />
         <span className={s.name}>{user!.name}</span>
-        <Button size="sm" onClick={logout}>
+        <Button size="sm" onClick={() => setConfirmLogout(true)}>
           {t("layout.logout")}
         </Button>
       </div>
+      {confirmLogout && (
+        <ConfirmDialog
+          title={t("layout.logoutTitle")}
+          text={t("layout.logoutText")}
+          confirmLabel={t("layout.logout")}
+          onConfirm={logout}
+          onClose={() => setConfirmLogout(false)}
+        />
+      )}
     </header>
   );
 }

@@ -1,0 +1,15 @@
+.filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+
+  select {
+    width: auto;
+  }
+}
+
+.num {
+  text-align: right !important;
+  white-space: nowrap;
+}

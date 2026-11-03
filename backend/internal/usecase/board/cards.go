@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"go.uber.org/fx"
@@ -30,6 +32,7 @@ type CardService struct {
 	storage FileStorage
 	events  usecase.BoardEvents
 	tx      usecase.Transactor
+	history History
 	log     *slog.Logger
 }
 
@@ -43,11 +46,13 @@ type CardDeps struct {
 	Storage FileStorage
 	Events  usecase.BoardEvents
 	Tx      usecase.Transactor
+	History History
 	Log     *slog.Logger
 }
 
 func NewCardService(d CardDeps) *CardService {
-	return &CardService{cards: d.Cards, columns: d.Columns, members: d.Members, index: d.Index, files: d.Files, storage: d.Storage, events: d.Events, tx: d.Tx, log: d.Log}
+	return &CardService{cards: d.Cards, columns: d.Columns, members: d.Members, index: d.Index, files: d.Files, storage: d.Storage,
+		events: d.Events, tx: d.Tx, history: d.History, log: d.Log}
 }
 
 type ListQuery struct {
@@ -57,7 +62,13 @@ type ListQuery struct {
 	Unassigned bool
 	Cursor     *domain.CardCursor
 	Limit      int
+
+	MilestoneID, SprintID, VersionID *int64
+	TagIDs                           []int64
 }
+
+// numberRe matches a task number as people type it: "#12", "KAN-12" or "12".
+var numberRe = regexp.MustCompile(`^(?:#|[A-Za-z][A-Za-z0-9]*-)?(\d{1,15})$`)
 
 // List returns one page of a column's cards, ordered by position.
 func (s *CardService) List(ctx context.Context, userID, projectID int64, q ListQuery) (domain.CardPage, error) {
@@ -69,21 +80,29 @@ func (s *CardService) List(ctx context.Context, userID, projectID int64, q ListQ
 	}
 
 	f := CardFilter{
-		ColumnID:   q.ColumnID,
-		Assignees:  q.Assignees,
-		Unassigned: q.Unassigned,
-		After:      q.Cursor,
-		Limit:      DefaultPageSize,
+		ColumnID:    q.ColumnID,
+		Assignees:   q.Assignees,
+		Unassigned:  q.Unassigned,
+		After:       q.Cursor,
+		Limit:       DefaultPageSize,
+		MilestoneID: q.MilestoneID, SprintID: q.SprintID, VersionID: q.VersionID, TagIDs: q.TagIDs,
 	}
 	if q.Limit > 0 {
 		f.Limit = min(q.Limit, MaxPageSize)
 	}
 	if search := strings.TrimSpace(q.Search); search != "" {
+		if m := numberRe.FindStringSubmatch(search); m != nil {
+			n, _ := strconv.ParseInt(m[1], 10, 64)
+			f.Number = &n
+			if m[1] != search {
+				return s.cards.List(ctx, f) // "#12" / "KAN-12": that card only
+			}
+		}
 		ids, err := s.index.Search(ctx, projectID, search, maxSearchHits)
 		if err != nil {
 			return domain.CardPage{}, err
 		}
-		if len(ids) == 0 {
+		if len(ids) == 0 && f.Number == nil {
 			return domain.CardPage{Cards: []domain.Card{}}, nil
 		}
 		f.OnlyIDs = ids
@@ -171,6 +190,12 @@ func (s *CardService) Update(ctx context.Context, userID, cardID int64, d domain
 	if err := s.cards.Update(ctx, c.ID, d); err != nil {
 		return c, err
 	}
+	s.record(ctx, userID, c.ID, []domain.HistoryEntry{
+		{Field: "title", Old: c.Title, New: d.Title},
+		{Field: "description", Old: changedMark(c.Description, d.Description), New: changedMark(d.Description, c.Description)},
+		{Field: "priority", Old: string(c.Priority), New: string(d.Priority)},
+		{Field: "assignee", Old: idString(c.AssigneeID), New: idString(d.AssigneeID)},
+	})
 	s.reindex(ctx, c.ID)
 	return s.publishCard(ctx, userID, c.ID)
 }
@@ -225,6 +250,7 @@ func (s *CardService) Move(ctx context.Context, userID, cardID, columnID int64, 
 	if err != nil {
 		return moved, err
 	}
+	s.record(ctx, userID, c.ID, []domain.HistoryEntry{{Field: "column", Old: idString(&c.ColumnID), New: idString(&columnID)}})
 	// Tell viewers the card's new neighbours, so they can place it among the cards they have loaded.
 	ev := domain.BoardEvent{Type: domain.EventCardMoved, ProjectID: c.ProjectID, ActorID: userID, Card: &moved, FromColumnID: c.ColumnID}
 	for i, id := range order {
@@ -265,13 +291,23 @@ func insertInOrder(order []int64, cardID int64, p Placement) []int64 {
 	return out
 }
 
-func (s *CardService) Delete(ctx context.Context, userID, cardID int64) error {
+// Delete removes a card: its author or the project owner may, and (OmiTeam) company owners and
+// admins, or managers and leads who administer the project. A task with logged time stays.
+func (s *CardService) Delete(ctx context.Context, actor domain.User, cardID int64) error {
+	userID := actor.ID
 	c, role, err := s.accessibleCard(ctx, userID, cardID)
 	if err != nil {
 		return err
 	}
-	if c.AuthorID != userID && role != domain.RoleOwner {
+	company := actor.Role == domain.CompanyOwner || actor.Role == domain.CompanyAdmin ||
+		((actor.Role == domain.CompanyManager || actor.IsLead()) && (role == domain.RoleAdmin || role == domain.RoleOwner))
+	if c.AuthorID != userID && role != domain.RoleOwner && !company {
 		return domain.ErrCardDeleteDenied
+	}
+	if has, err := s.cards.HasTime(ctx, c.ID); err != nil {
+		return err
+	} else if has {
+		return domain.ErrTaskHasTime
 	}
 	keys, err := s.files.KeysForCard(ctx, c.ID)
 	if err != nil {
@@ -321,4 +357,36 @@ func (s *CardService) SyncIndex(ctx context.Context) error {
 	}
 	s.log.Info("search index: rebuilding", "indexed", indexed, "cards", total)
 	return s.index.Upsert(ctx, docs...)
+}
+
+// record writes the entries whose value changed; history is best-effort, like events.
+func (s *CardService) record(ctx context.Context, actorID, cardID int64, entries []domain.HistoryEntry) {
+	var changed []domain.HistoryEntry
+	for _, e := range entries {
+		if e.Old != e.New {
+			e.CardID, e.ActorID = cardID, &actorID
+			changed = append(changed, e)
+		}
+	}
+	if len(changed) == 0 {
+		return
+	}
+	if err := s.history.Add(ctx, changed...); err != nil {
+		s.log.Warn("card history", "card", cardID, "err", err)
+	}
+}
+
+func idString(id *int64) string {
+	if id == nil {
+		return ""
+	}
+	return strconv.FormatInt(*id, 10)
+}
+
+// changedMark avoids storing whole descriptions in the history: it only says the text changed.
+func changedMark(a, b string) string {
+	if a == b {
+		return ""
+	}
+	return "~"
 }

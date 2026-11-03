@@ -9,6 +9,8 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/auth"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/organization"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/user"
 )
 
@@ -16,17 +18,35 @@ func init() { registerRoutes(NewUserHandler) }
 
 type UserHandler struct {
 	users   *user.Service
+	orgs    *organization.Service
+	auth    *auth.Service
 	present *Presenter
 }
 
-func NewUserHandler(users *user.Service, present *Presenter) *UserHandler {
-	return &UserHandler{users: users, present: present}
+func NewUserHandler(users *user.Service, orgs *organization.Service, a *auth.Service, present *Presenter) *UserHandler {
+	return &UserHandler{users: users, orgs: orgs, auth: a, present: present}
+}
+
+// me answers with the account after a change to it (avatar, settings), in the current organization.
+func (h *UserHandler) me(c *echo.Context, changed domain.User) error {
+	u := currentUser(c)
+	u.Name, u.Email, u.Color, u.AvatarKey, u.AvatarUpdatedAt, u.Settings =
+		changed.Name, changed.Email, changed.Color, changed.AvatarKey, changed.AvatarUpdatedAt, changed.Settings
+	u, ms, err := h.auth.Account(c.Request().Context(), u, u.OrgID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, h.present.Me(u, ms))
 }
 
 func (h *UserHandler) Mount(public, private *echo.Group) {
 	private.PUT("/users/me/settings", h.updateSettings)
 	private.PUT("/users/me/avatar", h.uploadAvatar)
 	private.DELETE("/users/me/avatar", h.removeAvatar)
+	private.PUT("/users/:id/role", h.changeRole)
+	private.POST("/users/:id/dismiss", h.dismiss)
+	private.POST("/users/:id/activate", h.setActive(true))
+	private.POST("/users/:id/deactivate", h.setActive(false))
 	public.GET("/users/:id/avatar", h.avatar) // authorised by the URL signature, see Presenter
 }
 
@@ -48,7 +68,7 @@ func (h *UserHandler) uploadAvatar(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, h.present.Me(u))
+	return h.me(c, u)
 }
 
 func (h *UserHandler) removeAvatar(c *echo.Context) error {
@@ -56,7 +76,7 @@ func (h *UserHandler) removeAvatar(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, h.present.Me(u))
+	return h.me(c, u)
 }
 
 func (h *UserHandler) updateSettings(c *echo.Context) error {
@@ -68,7 +88,7 @@ func (h *UserHandler) updateSettings(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, h.present.Me(u))
+	return h.me(c, u)
 }
 
 // avatar streams the image from object storage. URLs carry ?v=<version>, so it is cached for good.
@@ -97,4 +117,64 @@ func (h *UserHandler) avatar(c *echo.Context) error {
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.Copy(w, body)
 	return nil
+}
+
+type roleRequest struct {
+	Role          domain.CompanyRole    `json:"role"`
+	AdditionRoles []domain.AdditionRole `json:"additionRoles"` // omitted or null: unchanged
+}
+
+func (h *UserHandler) changeRole(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
+	}
+	var req roleRequest
+	if err := bind(c, &req); err != nil {
+		return err
+	}
+	// A role is a membership of the organization the request works in.
+	actor := currentUser(c)
+	members, err := h.orgs.ChangeRole(c.Request().Context(), actor.ID, actor.OrgID, id, req.Role, req.AdditionRoles)
+	if err != nil {
+		return err
+	}
+	for _, m := range members {
+		if m.ID == id {
+			return c.JSON(http.StatusOK, h.present.User(m.User))
+		}
+	}
+	return errNotFound
+}
+
+func (h *UserHandler) dismiss(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
+	}
+	var in struct {
+		Reason string `json:"reason"`
+	}
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	u, err := h.users.Dismiss(c.Request().Context(), currentUser(c), id, in.Reason)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, h.present.User(u))
+}
+
+func (h *UserHandler) setActive(active bool) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		id, err := pathID(c, "id")
+		if err != nil {
+			return err
+		}
+		u, err := h.users.SetActive(c.Request().Context(), currentUser(c), id, active)
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, h.present.User(u))
+	}
 }

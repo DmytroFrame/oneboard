@@ -6,13 +6,16 @@ import (
 	"context"
 	"errors"
 	"net/mail"
+	"slices"
 	"strings"
 	"time"
 
 	"go.uber.org/fx"
 
+	"github.com/DmytroFrame/oneboard/backend/internal/config"
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
 	"github.com/DmytroFrame/oneboard/backend/internal/modules"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/collab"
 )
 
@@ -28,6 +31,11 @@ type Users interface {
 	ByEmail(ctx context.Context, email string) (domain.User, error)
 	ByID(ctx context.Context, id int64) (domain.User, error)
 	Count(ctx context.Context) (int, error)
+	SetPassword(ctx context.Context, userID int64, hash string) error
+	// Memberships lists the organizations a user belongs to, oldest first; Membership is one of them
+	// (domain.ErrNoRows for outsiders).
+	Memberships(ctx context.Context, userID int64) ([]domain.Membership, error)
+	Membership(ctx context.Context, orgID, userID int64) (domain.Membership, error)
 }
 
 // ClockSkew is how long past "exp" an access token is still accepted, to tolerate clock drift.
@@ -73,7 +81,13 @@ type Revocations interface {
 
 // Invitations turns pending organization invitations for an email into memberships.
 type Invitations interface {
+	HasPending(ctx context.Context, email string) (bool, error)
 	AcceptPending(ctx context.Context, userID int64, email string) error
+}
+
+// Founder creates an organization owned by a user (the very first account founds the first one).
+type Founder interface {
+	Found(ctx context.Context, name string, ownerID int64) (int64, error)
 }
 
 type PasswordHasher interface {
@@ -94,7 +108,13 @@ type Service struct {
 	refresh     RefreshTokens
 	revocations Revocations
 	invitations Invitations
+	founder     Founder
+	tx          usecase.Transactor
 	hasher      PasswordHasher
+	resets      ResetTokens
+	mailer      Mailer
+	platform    []string // PLATFORM_ADMINS, lower-case emails
+	appURL      string
 }
 
 type Deps struct {
@@ -104,35 +124,52 @@ type Deps struct {
 	Refresh     RefreshTokens
 	Revocations Revocations
 	Invitations Invitations
+	Founder     Founder
+	Tx          usecase.Transactor
 	Hasher      PasswordHasher
+	Resets      ResetTokens
+	Mailer      Mailer
+	Config      config.Config
 }
 
 func NewService(d Deps) *Service {
-	return &Service{users: d.Users, access: d.Access, refresh: d.Refresh, revocations: d.Revocations, invitations: d.Invitations, hasher: d.Hasher}
+	return &Service{users: d.Users, access: d.Access, refresh: d.Refresh, revocations: d.Revocations, invitations: d.Invitations,
+		founder: d.Founder, tx: d.Tx, hasher: d.Hasher, resets: d.Resets, mailer: d.Mailer, platform: d.Config.PlatformAdmins, appURL: d.Config.AppURL}
 }
 
 type RegisterInput struct {
 	Name, Email, Password string
 }
 
+// Register is by invitation only: the email must have a pending invitation to an organization. The
+// very first account of an installation is the exception: it founds the first organization.
 func (s *Service) Register(ctx context.Context, in RegisterInput) (Session, error) {
 	name := strings.TrimSpace(in.Name)
 	email := strings.ToLower(strings.TrimSpace(in.Email))
+	count, err := s.users.Count(ctx)
+	if err != nil {
+		return Session{}, err
+	}
+	if count > 0 {
+		invited, err := s.invitations.HasPending(ctx, email)
+		if err != nil {
+			return Session{}, err
+		}
+		if !invited {
+			return Session{}, domain.ErrRegistrationClosed
+		}
+	}
 	if name == "" || len(name) > 100 {
 		return Session{}, domain.ErrNameInvalid
 	}
 	if _, err := mail.ParseAddress(email); err != nil {
 		return Session{}, domain.ErrEmailInvalid
 	}
-	if len(in.Password) < 8 || len(in.Password) > 72 {
-		return Session{}, domain.ErrPasswordInvalid
+	if err := domain.ValidatePassword(in.Password); err != nil {
+		return Session{}, err
 	}
 
 	hash, err := s.hasher.Hash(in.Password)
-	if err != nil {
-		return Session{}, err
-	}
-	count, err := s.users.Count(ctx)
 	if err != nil {
 		return Session{}, err
 	}
@@ -142,14 +179,21 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (Session, erro
 		PasswordHash: hash,
 		Color:        domain.AvatarColors[count%len(domain.AvatarColors)],
 	}
-	if err := s.users.Create(ctx, &u); err != nil {
-		if errors.Is(err, domain.ErrDuplicate) {
-			return Session{}, domain.ErrEmailTaken
+	err = s.tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.users.Create(ctx, &u); err != nil {
+			if errors.Is(err, domain.ErrDuplicate) {
+				return domain.ErrEmailTaken
+			}
+			return err
 		}
-		return Session{}, err
-	}
-	// Organizations may have invited this email before the account existed.
-	if err := s.invitations.AcceptPending(ctx, u.ID, u.Email); err != nil {
+		if count == 0 {
+			_, err := s.founder.Found(ctx, name+"'s organization", u.ID)
+			return err
+		}
+		// The invitations become memberships with the roles they were sent with.
+		return s.invitations.AcceptPending(ctx, u.ID, u.Email)
+	})
+	if err != nil {
 		return Session{}, err
 	}
 	return s.startSession(ctx, u)
@@ -162,6 +206,15 @@ func (s *Service) Login(ctx context.Context, email, password string) (Session, e
 	}
 	if err != nil || !s.hasher.Compare(u.PasswordHash, password) {
 		return Session{}, domain.ErrInvalidCredentials
+	}
+	// Someone deactivated or dismissed everywhere they worked can't sign in; without any organization
+	// (e.g. all of them deleted) they still can, to found a new one.
+	ms, err := s.users.Memberships(ctx, u.ID)
+	if err != nil {
+		return Session{}, err
+	}
+	if len(ms) > 0 && !slices.ContainsFunc(ms, func(m domain.Membership) bool { return m.Active }) {
+		return Session{}, domain.ErrAccountDeactivated
 	}
 	return s.startSession(ctx, u)
 }
@@ -237,5 +290,49 @@ func (s *Service) Authenticate(ctx context.Context, accessToken string) (domain.
 	if errors.Is(err, domain.ErrNoRows) {
 		return domain.User{}, domain.ErrTokenInvalid
 	}
+	u.PlatformAdmin = slices.Contains(s.platform, strings.ToLower(u.Email))
 	return u, err
+}
+
+// InOrg puts the user into the organization a request works in: wanted (the X-Organization header),
+// or their oldest active membership when wanted is 0. Asking for an organization where they aren't
+// an active member is ErrOrgUnavailable, so a stale choice never acts on another organization. A user
+// without any organization gets OrgID 0 and no role.
+func (s *Service) InOrg(ctx context.Context, u domain.User, wanted int64) (domain.User, error) {
+	if wanted != 0 {
+		m, err := s.users.Membership(ctx, wanted, u.ID)
+		if errors.Is(err, domain.ErrNoRows) || (err == nil && !m.Active) {
+			return u, domain.ErrOrgUnavailable
+		}
+		if err != nil {
+			return u, err
+		}
+		return u.In(m), nil
+	}
+	ms, err := s.users.Memberships(ctx, u.ID)
+	if err != nil {
+		return u, err
+	}
+	for _, m := range ms {
+		if m.Active {
+			return u.In(m), nil
+		}
+	}
+	return u, nil
+}
+
+// Account is what the client shows about the signed-in user: the user in the organization they want
+// to work in (falling back to their first one when that is no longer possible) and all their
+// organizations, for the switcher.
+func (s *Service) Account(ctx context.Context, u domain.User, wanted int64) (domain.User, []domain.Membership, error) {
+	u.PlatformAdmin = slices.Contains(s.platform, strings.ToLower(u.Email))
+	in, err := s.InOrg(ctx, u, wanted)
+	if errors.Is(err, domain.ErrOrgUnavailable) {
+		in, err = s.InOrg(ctx, u, 0)
+	}
+	if err != nil {
+		return u, nil, err
+	}
+	ms, err := s.users.Memberships(ctx, u.ID)
+	return in, ms, err
 }

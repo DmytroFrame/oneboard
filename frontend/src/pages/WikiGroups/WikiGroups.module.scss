@@ -1,0 +1,60 @@
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  h1 {
+    font-size: 28px;
+    margin: 0;
+  }
+}
+
+.flush {
+  margin: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: var(--r-md);
+
+  &:hover {
+    background: var(--hover);
+  }
+}
+
+.name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.tools {
+  display: flex;
+  gap: 6px;
+}
+
+.members {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 2px;
+  font-size: 14px;
+
+  span {
+    flex: 1;
+  }
+
+  input {
+    width: auto;
+  }
+}

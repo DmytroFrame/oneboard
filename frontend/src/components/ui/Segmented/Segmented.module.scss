@@ -1,0 +1,27 @@
+.group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-sm);
+  background: var(--hover);
+}
+
+.option {
+  @include bare-button;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 590;
+  color: var(--text-subtle);
+
+  &:hover {
+    color: var(--text);
+  }
+}
+
+.on {
+  background: var(--glass-hover);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}

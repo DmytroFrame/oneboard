@@ -8,11 +8,17 @@ import { FieldLabel } from "@/components/ui/FieldLabel/FieldLabel";
 import { FormError } from "@/components/ui/FormError/FormError";
 import { ModalDialog, ModalFooter } from "@/components/ui/Modal/Modal";
 import { Spacer } from "@/components/ui/Spacer/Spacer";
+import { api } from "@/lib/api";
+import { tasksApi } from "@/lib/api/tasks";
 import { CardDocProvider } from "@/lib/cardDoc";
 import type { Card, CardInput } from "@/types";
 import type { CardModalProps } from "./CardModal";
 import { CardModalHeader } from "./CardModalHeader";
+import { CardWorklog } from "@/components/CardWorklog/CardWorklog";
+import { Activity } from "./Activity";
 import { CardSidebar } from "./CardSidebar";
+import { Checklists } from "./Checklists";
+import { TaskDetailsPanel } from "./TaskDetailsPanel";
 import s from "./CardModal.module.scss";
 
 const AUTOSAVE_DELAY = 800;
@@ -148,6 +154,23 @@ export function ExistingCard(props: CardModalProps & { card: Card }) {
     }
   }
 
+  // Checklists and comments change the card face (progress, counts): reload it.
+  const refresh = () => {
+    api.card(card.id).then(props.onCardChanged).catch(() => {});
+  };
+
+  async function saveAsTemplate() {
+    setBusy(true);
+    try {
+      const saved = await tasksApi.setTemplate(card.id, true);
+      props.onCardRemoved(saved);
+      onClose();
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  }
+
   async function remove() {
     if (!confirm(t("card.deleteConfirm", { key: card.key }))) return;
     setBusy(true);
@@ -195,6 +218,16 @@ export function ExistingCard(props: CardModalProps & { card: Card }) {
             isProjectOwner={props.isProjectOwner}
             onChange={(list) => props.onAttachmentsChange(card, list)}
           />
+          <Checklists cardId={card.id} onChanged={refresh} onError={setError} />
+          <Activity
+            card={card}
+            currentUser={currentUser}
+            isProjectOwner={props.isProjectOwner}
+            columns={columns}
+            users={users}
+            onChanged={refresh}
+            worklog={<CardWorklog card={card} />}
+          />
         </div>
         <CardSidebar
           columns={columns}
@@ -207,7 +240,9 @@ export function ExistingCard(props: CardModalProps & { card: Card }) {
           onColumn={(id) => void onMove(card, id).catch((err) => setError((err as Error).message))}
           onPriority={(p) => (setPriority(p), void saveField({ priority: p }))}
           onAssignee={(id) => (setAssigneeId(id), void saveField({ assigneeId: id }))}
-        />
+        >
+          <TaskDetailsPanel card={card} planning={props.planning} tags={props.tags} onChanged={props.onCardChanged} onError={setError} />
+        </CardSidebar>
       </div>
       <ModalFooter>
         {props.canDelete && (
@@ -215,6 +250,9 @@ export function ExistingCard(props: CardModalProps & { card: Card }) {
             {t("common.delete")}
           </Button>
         )}
+        <Button type="button" onClick={saveAsTemplate} disabled={busy}>
+          {t("tasks.saveAsTemplate")}
+        </Button>
         <Spacer />
         <Button type="button" variant="primary" onClick={onClose}>
           {t("common.close")}

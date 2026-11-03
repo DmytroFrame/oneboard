@@ -62,6 +62,12 @@ export function ProfileSettings() {
         <div>
           <div className={s.name}>{user.name}</div>
           <div className={s.email}>{user.email}</div>
+          {user.role && user.organization && (
+            <div className={s.role}>
+              {t("settings.companyRole")} ({user.organization.name}):{" "}
+              <strong>{[user.role, ...user.additionRoles].map((r) => t(`companyRoles.${r}`)).join(" · ")}</strong>
+            </div>
+          )}
           <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={onFile} />
           <div className={s.actions}>
             <Button variant="primary" size="sm" disabled={busy} onClick={() => inputRef.current?.click()}>

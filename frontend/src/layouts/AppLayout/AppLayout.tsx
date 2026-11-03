@@ -13,7 +13,9 @@ import { useAuth } from "@/context/auth";
 import { useEscape } from "@/hooks/useEscape";
 import { useVoiceProblemText } from "@/hooks/useVoiceProblemText";
 import { api } from "@/lib/api";
-import { can } from "@/lib/permissions";
+import { TIMELOGS_CHANGED, timeApi } from "@/lib/api/time";
+import { canAccess } from "@/lib/companyRoles";
+import { can } from "@/lib/companyRoles";
 import { BoardSocket, type UserEvent } from "@/lib/realtime";
 import { useVoice, voice } from "@/lib/voice";
 import type { Organization, Project } from "@/types";
@@ -23,7 +25,7 @@ import s from "./AppLayout.module.scss";
 /** The signed-in app shell: top bar, sidebar, notices, and the user's real-time channel. */
 export default function AppLayout() {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [orgs, setOrgs] = useState<Organization[]>([]);
@@ -41,6 +43,18 @@ export default function AppLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   useEffect(() => setDrawerOpen(false), [location.pathname]);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+
+  // Sidebar dots: missing time logs, absence requests to review.
+  const [alerts, setAlerts] = useState({ time: false, vacations: false });
+  const loadAlerts = useCallback(() => {
+    if (canAccess(user, "time")) timeApi.missing().then((m) => setAlerts((a) => ({ ...a, time: m.days.length > 0 }))).catch(() => {});
+    if (canAccess(user, "vacations")) timeApi.toReview().then((v) => setAlerts((a) => ({ ...a, vacations: v.length > 0 }))).catch(() => {});
+  }, [user]);
+  useEffect(() => {
+    loadAlerts();
+    window.addEventListener(TIMELOGS_CHANGED, loadAlerts);
+    return () => window.removeEventListener(TIMELOGS_CHANGED, loadAlerts);
+  }, [loadAlerts]);
   useEscape(closeDrawer, drawerOpen);
 
   const reload = useCallback(async () => {
@@ -86,6 +100,15 @@ export default function AppLayout() {
     const off = socket.on("user", (m) => {
       const e = m.event as UserEvent;
       if (e.type === "voice") return; // handled by the voice controller
+      if (e.type === "vacations") {
+        loadAlerts();
+        return;
+      }
+      if (e.type === "account") {
+        // Our company role changed: reload the account (permissions, sections).
+        api.me().then(setUser).catch(() => {});
+        return;
+      }
       if (e.type === "org.members") {
         setOrgMembersSignal((prev) => ({ orgId: e.orgId, n: prev.n + 1 }));
         void reload(); // member counts
@@ -153,11 +176,13 @@ export default function AppLayout() {
       <div className={s.body}>
         {drawerOpen && <div className={s.drawerBackdrop} onClick={closeDrawer} />}
         <Sidebar
+          user={user!}
           orgs={orgs}
           projects={projects ?? []}
           open={drawerOpen}
           onCreateProject={(orgId) => setCreatingProject({ orgId })}
           onCreateOrg={() => setCreatingOrg(true)}
+          alerts={alerts}
         />
 
         {notice && (
@@ -173,7 +198,7 @@ export default function AppLayout() {
 
       {creatingProject && (
         <CreateProjectModal
-          orgs={orgs.filter((o) => can.createProjects(o.role))}
+          orgs={orgs.filter((o) => o.id === user?.organization?.id && can(user, "addProject"))}
           defaultOrgId={creatingProject.orgId}
           onClose={() => setCreatingProject(null)}
           onCreated={async (p) => {

@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"errors"
 
 	"github.com/jackc/pgx/v5"
 
@@ -47,6 +46,35 @@ func (r *OrgRepo) Create(ctx context.Context, name string, createdBy int64) (int
 	return id, mapErr(err)
 }
 
+// Found creates an organization with its owner and the default reference lists (auth.Founder).
+func (r *OrgRepo) Found(ctx context.Context, name string, ownerID int64) (int64, error) {
+	id, err := r.Create(ctx, name, ownerID)
+	if err != nil {
+		return 0, err
+	}
+	if err := exec(ctx, r.db, `INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, 'OWNER')`, id, ownerID); err != nil {
+		return 0, err
+	}
+	return id, r.SeedDirectories(ctx, id)
+}
+
+// defaultDirectories are the reference lists every new organization starts with.
+var defaultDirectories = map[string][]string{
+	"specialization":    {"Frontend", "Backend", "Fullstack", "Mobile", "QA", "Design", "DevOps", "Project management"},
+	"tech_stack":        {"React", "TypeScript", "Go", "Node.js", "Python", "Flutter", "PostgreSQL", "AWS"},
+	"candidate_channel": {"Djinni", "DOU", "LinkedIn", "Referral"},
+}
+
+func (r *OrgRepo) SeedDirectories(ctx context.Context, orgID int64) error {
+	for kind, names := range defaultDirectories {
+		if err := exec(ctx, r.db, `INSERT INTO directory_items (organization_id, kind, name) SELECT $1, $2, unnest($3::text[])
+			ON CONFLICT DO NOTHING`, orgID, kind, names); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *OrgRepo) Rename(ctx context.Context, orgID int64, name string) error {
 	return exec(ctx, r.db, `UPDATE organizations SET name = $2 WHERE id = $1`, orgID, name)
 }
@@ -69,38 +97,38 @@ type OrgMemberRepo struct{ db *DB }
 
 func NewOrgMemberRepo(db *DB) *OrgMemberRepo { return &OrgMemberRepo{db: db} }
 
-func (r *OrgMemberRepo) Role(ctx context.Context, orgID, userID int64) (domain.OrgRole, error) {
-	var role domain.OrgRole
-	err := r.db.q(ctx).QueryRow(ctx,
-		`SELECT role FROM organization_members WHERE organization_id = $1 AND user_id = $2`, orgID, userID).Scan(&role)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.OrgRoleNone, nil
-	}
-	return role, err
+func (r *OrgMemberRepo) Membership(ctx context.Context, orgID, userID int64) (domain.Membership, error) {
+	return membership(ctx, r.db, orgID, userID)
 }
 
 func (r *OrgMemberRepo) List(ctx context.Context, orgID int64) ([]domain.OrgMember, error) {
-	rows, err := r.db.q(ctx).Query(ctx, `
-		SELECT u.id, u.name, u.email, u.color, COALESCE(u.avatar_key, ''), u.avatar_updated_at, m.role, m.added_at
-		FROM organization_members m JOIN users u ON u.id = m.user_id
+	rows, err := r.db.q(ctx).Query(ctx, `SELECT `+userColumns+`, `+memberColumns+`, m.added_at
+		FROM organization_members m JOIN users ON users.id = m.user_id
 		WHERE m.organization_id = $1
-		ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, lower(u.name)`, orgID)
+		ORDER BY CASE m.role WHEN 'OWNER' THEN 0 WHEN 'ADMIN' THEN 1 ELSE 2 END, lower(users.name)`, orgID)
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.OrgMember, error) {
-		var m domain.OrgMember
-		err := row.Scan(&m.ID, &m.Name, &m.Email, &m.Color, &m.AvatarKey, &m.AvatarUpdatedAt, &m.Role, &m.AddedAt)
-		return m, err
+		var om domain.OrgMember
+		var m domain.Membership
+		err := row.Scan(append(memberFields(&om.User, &m), &om.AddedAt)...)
+		om.OrgID, om.Role, om.AdditionRoles, om.Active, om.DismissedAt, om.DismissalReason =
+			m.OrgID, m.Role, m.AdditionRoles, m.Active, m.DismissedAt, m.DismissalReason
+		return om, err
 	})
 }
 
-func (r *OrgMemberRepo) Add(ctx context.Context, orgID, userID int64, role domain.OrgRole) error {
+func (r *OrgMemberRepo) Add(ctx context.Context, orgID, userID int64, role domain.CompanyRole) error {
 	return exec(ctx, r.db, `INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, $3)`, orgID, userID, role)
 }
 
-func (r *OrgMemberRepo) SetRole(ctx context.Context, orgID, userID int64, role domain.OrgRole) error {
-	return exec(ctx, r.db, `UPDATE organization_members SET role = $3 WHERE organization_id = $1 AND user_id = $2`, orgID, userID, role)
+func (r *OrgMemberRepo) SetRole(ctx context.Context, orgID, userID int64, role domain.CompanyRole, additions []domain.AdditionRole) error {
+	if additions == nil {
+		additions = []domain.AdditionRole{}
+	}
+	return exec(ctx, r.db, `UPDATE organization_members SET role = $3, addition_roles = $4 WHERE organization_id = $1 AND user_id = $2`,
+		orgID, userID, role, additions)
 }
 
 func (r *OrgMemberRepo) Remove(ctx context.Context, orgID, userID int64) error {
@@ -112,7 +140,7 @@ func (r *OrgMemberRepo) CountOwners(ctx context.Context, orgID int64) (int, erro
 	// FOR UPDATE on the owner rows keeps two concurrent demotions from leaving no owner.
 	err := r.db.q(ctx).QueryRow(ctx, `
 		SELECT COUNT(*) FROM (
-			SELECT 1 FROM organization_members WHERE organization_id = $1 AND role = 'owner' FOR UPDATE
+			SELECT 1 FROM organization_members WHERE organization_id = $1 AND role = 'OWNER' FOR UPDATE
 		) owners`, orgID).Scan(&n)
 	return n, err
 }
@@ -121,7 +149,7 @@ func (r *OrgMemberRepo) FirstOwnerExcept(ctx context.Context, orgID, userID int6
 	var id int64
 	err := r.db.q(ctx).QueryRow(ctx, `
 		SELECT user_id FROM organization_members
-		WHERE organization_id = $1 AND role = 'owner' AND user_id <> $2
+		WHERE organization_id = $1 AND role = 'OWNER' AND user_id <> $2
 		ORDER BY added_at, user_id LIMIT 1`, orgID, userID).Scan(&id)
 	return id, mapErr(err)
 }
@@ -144,7 +172,7 @@ func (r *InvitationRepo) List(ctx context.Context, orgID int64) ([]domain.Invita
 	})
 }
 
-func (r *InvitationRepo) Create(ctx context.Context, orgID int64, email string, role domain.OrgRole, invitedBy int64) error {
+func (r *InvitationRepo) Create(ctx context.Context, orgID int64, email string, role domain.CompanyRole, invitedBy int64) error {
 	return exec(ctx, r.db, `
 		INSERT INTO organization_invitations (organization_id, email, role, invited_by) VALUES ($1, $2, $3, $4)`,
 		orgID, email, role, invitedBy)
@@ -159,6 +187,12 @@ func (r *InvitationRepo) Delete(ctx context.Context, orgID, invitationID int64) 
 		return domain.ErrNoRows
 	}
 	return nil
+}
+
+func (r *InvitationRepo) HasPending(ctx context.Context, email string) (bool, error) {
+	var ok bool
+	err := r.db.q(ctx).QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM organization_invitations WHERE lower(email) = lower($1))`, email).Scan(&ok)
+	return ok, err
 }
 
 func (r *InvitationRepo) AcceptPending(ctx context.Context, userID int64, email string) error {

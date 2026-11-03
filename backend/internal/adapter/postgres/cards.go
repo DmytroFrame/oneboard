@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -19,7 +20,14 @@ func NewCardRepo(db *DB) *CardRepo { return &CardRepo{db: db} }
 const cardColumns = `
 	c.id, c.project_id, c.column_id, p.key || '-' || c.number, c.title, c.description, c.priority,
 	c.position, c.author_id, c.assignee_id, c.created_at, c.updated_at,
-	(SELECT COUNT(*) FROM card_attachments a WHERE a.card_id = c.id), cov.id, cov.kind, cov.thumb_key IS NOT NULL`
+	(SELECT COUNT(*) FROM card_attachments a WHERE a.card_id = c.id), cov.id, cov.kind, cov.thumb_key IS NOT NULL,
+	c.story_points, c.budget_hours::float8, c.billable, c.special_type, c.milestone_id, c.sprint_id, c.version_id, c.is_template,
+	(SELECT COALESCE(json_agg(json_build_object('id', t.id, 'name', t.name, 'color', t.color) ORDER BY lower(t.name)), '[]')
+		FROM card_tags ct JOIN project_tags t ON t.id = ct.tag_id WHERE ct.card_id = c.id),
+	(SELECT COUNT(*) FILTER (WHERE i.done) FROM card_checklists cl JOIN checklist_items i ON i.checklist_id = cl.id WHERE cl.card_id = c.id),
+	(SELECT COUNT(*) FROM card_checklists cl JOIN checklist_items i ON i.checklist_id = cl.id WHERE cl.card_id = c.id),
+	(SELECT COUNT(*) FROM card_comments cc WHERE cc.card_id = c.id),
+	(SELECT COALESCE(SUM(tl.minutes), 0) FROM timelogs tl WHERE tl.card_id = c.id)`
 
 const cardJoins = `
 	FROM cards c JOIN projects p ON p.id = c.project_id
@@ -35,11 +43,32 @@ func scanCard(row pgx.Row, extra ...any) (domain.Card, error) {
 	var coverID *int64
 	var coverKind *domain.AttachmentKind
 	var coverThumb *bool
+	var storyPoints *int16
+	var tags []byte
 	dest := append([]any{&c.ID, &c.ProjectID, &c.ColumnID, &c.Key, &c.Title, &c.Description, &c.Priority,
 		&c.Position, &c.AuthorID, &c.AssigneeID, &c.CreatedAt, &c.UpdatedAt,
-		&c.AttachmentCount, &coverID, &coverKind, &coverThumb}, extra...)
+		&c.AttachmentCount, &coverID, &coverKind, &coverThumb,
+		&storyPoints, &c.BudgetHours, &c.Billable, &c.SpecialType, &c.MilestoneID, &c.SprintID, &c.VersionID, &c.IsTemplate,
+		&tags, &c.ChecklistDone, &c.ChecklistTotal, &c.CommentCount, &c.TrackedMinutes}, extra...)
 	if err := row.Scan(dest...); err != nil {
 		return c, mapErr(err)
+	}
+	if storyPoints != nil {
+		sp := int(*storyPoints)
+		c.StoryPoints = &sp
+	}
+	var tagRows []struct {
+		ID    int64  `json:"id"`
+		Name  string `json:"name"`
+		Color string `json:"color"`
+	}
+	if err := json.Unmarshal(tags, &tagRows); err != nil {
+		return c, err
+	}
+	c.Tags = make([]domain.Tag, len(tagRows))
+	for i, t := range tagRows {
+		c.Tags[i] = domain.Tag{ID: t.ID, ProjectID: c.ProjectID, Name: t.Name, Color: t.Color}
+		c.TagIDs = append(c.TagIDs, t.ID)
 	}
 	if coverID != nil {
 		c.Cover = &domain.CardCover{AttachmentID: *coverID, Kind: *coverKind, HasThumb: coverThumb != nil && *coverThumb}
@@ -57,9 +86,26 @@ func (r *CardRepo) List(ctx context.Context, f board.CardFilter) (domain.CardPag
 		args = append(args, v)
 		return fmt.Sprintf("$%d", len(args))
 	}
-	where := []string{"c.column_id = $1"}
-	if f.OnlyIDs != nil {
+	where := []string{"c.column_id = $1", "NOT c.is_template"}
+	switch {
+	case f.OnlyIDs != nil && f.Number != nil:
+		where = append(where, "(c.id = ANY("+arg(f.OnlyIDs)+") OR c.number = "+arg(*f.Number)+")")
+	case f.OnlyIDs != nil:
 		where = append(where, "c.id = ANY("+arg(f.OnlyIDs)+")")
+	case f.Number != nil:
+		where = append(where, "c.number = "+arg(*f.Number))
+	}
+	if f.MilestoneID != nil {
+		where = append(where, "c.milestone_id = "+arg(*f.MilestoneID))
+	}
+	if f.SprintID != nil {
+		where = append(where, "c.sprint_id = "+arg(*f.SprintID))
+	}
+	if f.VersionID != nil {
+		where = append(where, "c.version_id = "+arg(*f.VersionID))
+	}
+	if len(f.TagIDs) > 0 {
+		where = append(where, "EXISTS (SELECT 1 FROM card_tags ct WHERE ct.card_id = c.id AND ct.tag_id = ANY("+arg(f.TagIDs)+"))")
 	}
 	switch {
 	case len(f.Assignees) > 0 && f.Unassigned:

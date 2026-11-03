@@ -32,6 +32,12 @@ type CardFilter struct {
 	Unassigned bool // include unassigned cards (OR-ed with Assignees)
 	After      *domain.CardCursor
 	Limit      int
+	// OmiTeam filters.
+	MilestoneID, SprintID, VersionID *int64
+	TagIDs                           []int64 // cards with any of these tags
+	// Number matches the card's number (#12, KAN-12). With OnlyIDs the two are OR-ed ("12" may be
+	// a number or a word), otherwise it is the only text filter.
+	Number *int64
 }
 
 type Cards interface {
@@ -48,6 +54,12 @@ type Cards interface {
 	Delete(ctx context.Context, cardID int64) error
 	SearchDocs(ctx context.Context, cardIDs ...int64) ([]domain.SearchDoc, error) // no ids = all cards
 	CountAll(ctx context.Context) (int, error)
+	HasTime(ctx context.Context, cardID int64) (bool, error) // time has been logged on it
+}
+
+// History records what changed on a task (shown in the task's History tab).
+type History interface {
+	Add(ctx context.Context, entries ...domain.HistoryEntry) error
 }
 
 // SearchIndex is the full-text index of cards. It only answers "which cards match";

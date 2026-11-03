@@ -1,0 +1,76 @@
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  h1 {
+    font-size: 28px;
+    margin: 4px 0 0;
+  }
+}
+
+.headActions {
+  display: flex;
+  gap: 8px;
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+
+  select {
+    width: auto;
+  }
+}
+
+.search {
+  width: 260px;
+  border-radius: 999px;
+
+  @include mobile {
+    width: 100%;
+  }
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-subtle);
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  text-decoration: none;
+
+  .who {
+    display: flex;
+    flex-direction: column;
+  }
+
+  small {
+    color: var(--text-subtle);
+    font-size: 12px;
+  }
+}
+
+.name {
+  font-weight: 600;
+}
+
+.stack {
+  display: flex;
+  gap: 4px;
+}
+
+.inactive td {
+  opacity: 0.55;
+}

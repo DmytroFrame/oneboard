@@ -29,7 +29,29 @@ type cardDTO struct {
 	UpdatedAt       time.Time       `json:"updatedAt"`
 	AttachmentCount int             `json:"attachmentCount"`
 	Cover           *coverDTO       `json:"cover"` // first image or video, shown on the card face
+
+	StoryPoints    *int               `json:"storyPoints"`
+	BudgetHours    *float64           `json:"budgetHours"`
+	Billable       bool               `json:"billable"`
+	SpecialType    domain.SpecialType `json:"specialType"`
+	MilestoneID    *int64             `json:"milestoneId"`
+	SprintID       *int64             `json:"sprintId"`
+	VersionID      *int64             `json:"versionId"`
+	IsTemplate     bool               `json:"isTemplate"`
+	Tags           []tagDTO           `json:"tags"`
+	ChecklistDone  int                `json:"checklistDone"`
+	ChecklistTotal int                `json:"checklistTotal"`
+	CommentCount   int                `json:"commentCount"`
+	TrackedMinutes int                `json:"trackedMinutes"`
 }
+
+type tagDTO struct {
+	ID    int64  `json:"id"`
+	Name  string `json:"name"`
+	Color string `json:"color"`
+}
+
+func toTag(t domain.Tag) tagDTO { return tagDTO{t.ID, t.Name, t.Color} }
 
 type cardPageDTO struct {
 	Cards      []cardDTO `json:"cards"`
@@ -38,8 +60,13 @@ type cardPageDTO struct {
 }
 
 func (p *Presenter) Card(c domain.Card) cardDTO {
-	d := cardDTO{c.ID, c.ProjectID, c.ColumnID, c.Key, c.Title, c.Description, c.Priority, c.Position,
-		c.AuthorID, c.AssigneeID, c.CreatedAt, c.UpdatedAt, c.AttachmentCount, nil}
+	d := cardDTO{ID: c.ID, ProjectID: c.ProjectID, ColumnID: c.ColumnID, Key: c.Key, Title: c.Title, Description: c.Description,
+		Priority: c.Priority, Position: c.Position, AuthorID: c.AuthorID, AssigneeID: c.AssigneeID, CreatedAt: c.CreatedAt,
+		UpdatedAt: c.UpdatedAt, AttachmentCount: c.AttachmentCount,
+		StoryPoints: c.StoryPoints, BudgetHours: c.BudgetHours, Billable: c.Billable, SpecialType: c.SpecialType,
+		MilestoneID: c.MilestoneID, SprintID: c.SprintID, VersionID: c.VersionID, IsTemplate: c.IsTemplate,
+		Tags: mapSlice(c.Tags, toTag), ChecklistDone: c.ChecklistDone, ChecklistTotal: c.ChecklistTotal,
+		CommentCount: c.CommentCount, TrackedMinutes: c.TrackedMinutes}
 	if cv := c.Cover; cv != nil {
 		variant := "file"
 		if cv.HasThumb {

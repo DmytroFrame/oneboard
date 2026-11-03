@@ -1,0 +1,136 @@
+.panel {
+  --series-billable: #007aff;
+  --series-other: #eb6834;
+
+  @include dark {
+    --series-billable: #0a84ff;
+    --series-other: #d95926;
+  }
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  h2 {
+    margin: 0;
+  }
+}
+
+.today {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-subtle);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.range {
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 110px;
+  text-align: center;
+}
+
+.legend {
+  margin-left: auto;
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--text-subtle);
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+}
+
+.billable,
+.other {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.billable {
+  background: var(--series-billable);
+}
+
+.other {
+  background: var(--series-other);
+}
+
+.chart {
+  position: relative;
+
+  svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+}
+
+.grid {
+  stroke: var(--separator);
+  stroke-width: 1;
+}
+
+.tick,
+.todayTick {
+  font-size: 11px;
+  fill: var(--text-subtle);
+}
+
+.todayTick {
+  fill: var(--text);
+  font-weight: 700;
+}
+
+.hit {
+  fill: transparent;
+}
+
+.billableBar {
+  fill: var(--series-billable);
+}
+
+.otherBar {
+  fill: var(--series-other);
+}
+
+.tooltip {
+  @include glass-panel;
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 1;
+
+  span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+}
+
+.empty {
+  margin: 4px 0 0;
+  font-size: 13px;
+}

@@ -1,0 +1,54 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  textarea {
+    width: 100%;
+  }
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 20px;
+
+  @include mobile {
+    grid-template-columns: 1fr;
+  }
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.name {
+  font-weight: 600;
+}
+
+.desc {
+  color: var(--text-subtle);
+  white-space: normal;
+}
+
+.actions {
+  text-align: right;
+
+  > * + * {
+    margin-left: 6px;
+  }
+}

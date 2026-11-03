@@ -128,3 +128,23 @@ func spaHandler(dir string) echo.HandlerFunc {
 		fs.ServeHTTP(w, r)
 	}))
 }
+
+// idList parses "1,2,3"; anything that isn't a number is skipped.
+func idList(s string) []int64 {
+	var out []int64
+	for _, part := range strings.Split(s, ",") {
+		if id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64); err == nil {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// optID parses an optional id query parameter.
+func optID(s string) *int64 {
+	id, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return nil
+	}
+	return &id
+}

@@ -2,7 +2,8 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { useTranslation } from "react-i18next";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { Center } from "@/components/ui/Center/Center";
-import { api, setSessionLostHandler } from "@/lib/api";
+import { api, setCurrentOrgId, setSessionLostHandler } from "@/lib/api";
+import { homeRoute } from "@/lib/companyRoles";
 import { applySettings } from "@/context/preferences";
 import type { CurrentUser } from "@/types";
 
@@ -67,6 +68,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!loading) cacheUser(user);
   }, [user, loading]);
 
+  // The server says which organization the session works in (it falls back when the stored choice is
+  // gone); later requests keep sending that one.
+  const orgId = user?.organization?.id;
+  useEffect(() => {
+    if (orgId) setCurrentOrgId(orgId);
+  }, [orgId]);
+
   // The account's settings win over whatever this browser had; signing out keeps them locally.
   const language = user?.settings.language;
   const theme = user?.settings.theme;
@@ -112,7 +120,7 @@ export function PublicOnly() {
   if (loading) return <Center fullScreen>{t("common.loading")}</Center>;
   if (user) {
     const from = (location.state as { from?: string } | null)?.from;
-    return <Navigate to={from ?? "/home"} replace />;
+    return <Navigate to={from ?? homeRoute(user)} replace />;
   }
   return <Outlet />;
 }

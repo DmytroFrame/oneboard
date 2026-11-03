@@ -1,9 +1,9 @@
 import { cx } from "@/lib/cx";
-import type { OrgRole, Role } from "@/types";
+import type { CompanyRole, Role } from "@/types";
 import s from "./RoleChip.module.scss";
 
 interface Props {
-  role: OrgRole | Role;
+  role: CompanyRole | Role;
   /** Translated role name. */
   label: string;
   /** md: in member lists of a project. */
@@ -11,5 +11,6 @@ interface Props {
 }
 
 export function RoleChip({ role, label, size = "sm" }: Props) {
-  return <span className={cx(s.chip, s[role], size === "md" && s.md)}>{label}</span>;
+  // Owners and admins stand out, in projects (owner/admin) and organizations (OWNER/ADMIN) alike.
+  return <span className={cx(s.chip, s[role.toLowerCase()], size === "md" && s.md)}>{label}</span>;
 }

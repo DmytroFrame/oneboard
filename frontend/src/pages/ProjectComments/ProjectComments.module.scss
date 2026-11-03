@@ -1,0 +1,39 @@
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+
+  select {
+    width: auto;
+  }
+}
+
+.titleCell {
+  min-width: 200px;
+}
+
+.body {
+  white-space: pre-line;
+  max-width: 480px;
+  font-size: 13px;
+}
+
+.date {
+  white-space: nowrap;
+
+  small {
+    display: block;
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+}
+
+.tools {
+  white-space: nowrap;
+  text-align: right !important;
+
+  button + button {
+    margin-left: 6px;
+  }
+}

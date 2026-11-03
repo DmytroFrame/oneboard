@@ -18,17 +18,33 @@ import { Muted } from "@/components/ui/Muted/Muted";
 import { Panel } from "@/components/ui/Panel/Panel";
 import { useAuth } from "@/context/auth";
 import { useLayout } from "@/layouts/AppLayout/useLayout";
-import { api } from "@/lib/api";
-import { can, ORG_ROLES } from "@/lib/permissions";
-import type { Invitation, Organization, OrgMember, OrgRole } from "@/types";
+import { api, switchOrganization } from "@/lib/api";
+import { can } from "@/lib/companyRoles";
+import type { CompanyRole, Invitation, Organization, OrgMember } from "@/types";
 import s from "./Organization.module.scss";
 
-/** Route wrapper: remounts the page when switching organizations so all state resets. */
+/** Route wrapper: an organization is managed from inside it (roles and permissions are per
+ * organization), so another one's page offers to switch there. */
 export default function OrganizationRoute() {
+  const { t } = useTranslation();
   const { orgId } = useParams();
+  const { user } = useAuth();
   const { orgs } = useLayout();
   const org = orgs.find((o) => o.id === Number(orgId));
   if (!org) return <Navigate to="/home" replace />;
+  if (org.id !== user?.organization?.id) {
+    return (
+      <Page width="medium">
+        <Panel>
+          <h2>{org.name}</h2>
+          <Muted as="p">{t("orgSwitcher.otherOrg")}</Muted>
+          <Button variant="primary" onClick={() => switchOrganization(org.id)}>
+            {t("orgSwitcher.switchTo", { name: org.name })}
+          </Button>
+        </Panel>
+      </Page>
+    );
+  }
   return <OrganizationPage key={org.id} org={org} />;
 }
 
@@ -39,12 +55,18 @@ function OrganizationPage({ org }: { org: Organization }) {
   const navigate = useNavigate();
   const me = user!;
   const role = org.role;
+  // Who may manage whom follows the company roles (domain/company.go): roles you could give, you can
+  // change and remove.
+  const grantable: CompanyRole[] = [...me.assignableRoles, "CANDIDATE"];
+  const manages = (m: OrgMember) => m.id !== me.id && grantable.includes(m.role);
+  const isOwner = role === "OWNER";
+  const managesOrg = role === "OWNER" || role === "ADMIN";
 
   const [members, setMembers] = useState<OrgMember[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [name, setName] = useState(org.name);
   const [email, setEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<OrgRole>("member");
+  const [inviteRole, setInviteRole] = useState<CompanyRole>(grantable.includes("EMPLOYEE") ? "EMPLOYEE" : grantable[0]!);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -52,11 +74,11 @@ function OrganizationPage({ org }: { org: Organization }) {
   const load = useCallback(async () => {
     try {
       setMembers(await api.orgMembers(org.id));
-      if (can.invite(role)) setInvitations(await api.invitations(org.id));
+      if (can(me, "addUser")) setInvitations(await api.invitations(org.id));
     } catch (err) {
       setError((err as Error).message);
     }
-  }, [org.id, role]);
+  }, [org.id, me]);
 
   useEffect(() => {
     load();
@@ -99,7 +121,7 @@ function OrganizationPage({ org }: { org: Organization }) {
     });
   };
 
-  const changeRole = (m: OrgMember, next: OrgRole) =>
+  const changeRole = (m: OrgMember, next: CompanyRole) =>
     run(async () => {
       setMembers(await api.changeOrgRole(org.id, m.id, next));
       if (m.id === me.id) await reload(); // my own permissions changed
@@ -141,11 +163,11 @@ function OrganizationPage({ org }: { org: Organization }) {
         meta={
           <Muted>
             {t("home.members", { count: org.memberCount })} · {t("home.projectsCount", { count: org.projectCount })} ·{" "}
-            <RoleChip role={role} label={t(`orgRoles.${role}`)} />
+            <RoleChip role={role} label={t(`companyRoles.${role}`)} />
           </Muted>
         }
         actions={
-          can.createProjects(role) && (
+          can(me, "addProject") && (
             <Button variant="primary" onClick={() => openCreateProject(org.id)}>
               {t("org.newProject")}
             </Button>
@@ -174,18 +196,19 @@ function OrganizationPage({ org }: { org: Organization }) {
         <MemberList>
           {members.map((m) => (
             <MemberRow key={m.id} avatar={<Avatar user={m} size={34} />} name={m.name} note={m.id === me.id && t("common.you")} detail={m.email}>
-              {can.manageRoles(role) ? (
-                <select className={s.roleSelect} value={m.role} disabled={busy} onChange={(e) => changeRole(m, e.target.value as OrgRole)}>
-                  {ORG_ROLES.map((r) => (
+              {!m.active && <Muted>{t("orgSwitcher.inactive")}</Muted>}
+              {manages(m) ? (
+                <select className={s.roleSelect} value={m.role} disabled={busy} onChange={(e) => changeRole(m, e.target.value as CompanyRole)}>
+                  {[...new Set([m.role, ...me.assignableRoles])].map((r) => (
                     <option key={r} value={r}>
-                      {t(`orgRoles.${r}`)}
+                      {t(`companyRoles.${r}`)}
                     </option>
                   ))}
                 </select>
               ) : (
-                <RoleChip role={m.role} label={t(`orgRoles.${m.role}`)} />
+                <RoleChip role={m.role} label={t(`companyRoles.${m.role}`)} />
               )}
-              {m.id !== me.id && can.remove(role, m.role) && (
+              {manages(m) && can(me, "fireUser") && (
                 <Button variant="danger" size="sm" onClick={() => remove(m)} disabled={busy}>
                   {t("common.remove")}
                 </Button>
@@ -195,15 +218,15 @@ function OrganizationPage({ org }: { org: Organization }) {
         </MemberList>
       </Panel>
 
-      {can.invite(role) && (
+      {can(me, "addUser") && (
         <Panel>
           <h2>{t("org.invite")}</h2>
           <InlineForm className={s.inviteForm} onSubmit={invite}>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t("org.emailPlaceholder")} required />
-            <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as OrgRole)}>
-              {ORG_ROLES.filter((r) => can.grant(role, r)).map((r) => (
+            <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as CompanyRole)}>
+              {grantable.map((r) => (
                 <option key={r} value={r}>
-                  {t(`orgRoles.${r}`)}
+                  {t(`companyRoles.${r}`)}
                 </option>
               ))}
             </select>
@@ -221,7 +244,7 @@ function OrganizationPage({ org }: { org: Organization }) {
               <MemberList>
                 {invitations.map((inv) => (
                   <MemberRow key={inv.id} avatar={<Avatar text="@" size={34} />} name={inv.email} detail={dateFmt.format(new Date(inv.createdAt))}>
-                    <RoleChip role={inv.role} label={t(`orgRoles.${inv.role}`)} />
+                    <RoleChip role={inv.role} label={t(`companyRoles.${inv.role}`)} />
                     <Button size="sm" disabled={busy} onClick={() => run(async () => (await api.revokeInvitation(org.id, inv.id), await load()))}>
                       {t("org.revoke")}
                     </Button>
@@ -233,7 +256,7 @@ function OrganizationPage({ org }: { org: Organization }) {
         </Panel>
       )}
 
-      {can.rename(role) && (
+      {managesOrg && (
         <Panel>
           <h2>{t("org.rename")}</h2>
           <InlineForm onSubmit={rename}>
@@ -243,7 +266,7 @@ function OrganizationPage({ org }: { org: Organization }) {
         </Panel>
       )}
 
-      {can.delete(role) ? (
+      {isOwner ? (
         <DangerZone
           title={t("org.deleteTitle")}
           text={t("org.deleteText")}

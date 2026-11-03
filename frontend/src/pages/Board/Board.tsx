@@ -1,11 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AddColumn } from "@/components/AddColumn/AddColumn";
 import { BoardColumn, type ColumnState } from "@/components/BoardColumn/BoardColumn";
 import { LiveCursors } from "@/components/LiveCursors/LiveCursors";
 import { PageHeader } from "@/components/PageHeader/PageHeader";
 import { ProjectSettingsModal } from "@/components/ProjectSettingsModal/ProjectSettingsModal";
+import { ProjectTabs } from "@/components/ProjectTabs/ProjectTabs";
 import { TeamFilter } from "@/components/TeamFilter/TeamFilter";
 import { Banner } from "@/components/ui/Banner/Banner";
 import { Button } from "@/components/ui/Button/Button";
@@ -19,9 +20,11 @@ import { useBoardRealtime } from "@/hooks/useBoardRealtime";
 import { useDebounced } from "@/hooks/useDebounced";
 import { useLayout } from "@/layouts/AppLayout/useLayout";
 import { api } from "@/lib/api";
+import { tasksApi } from "@/lib/api/tasks";
 import { cx } from "@/lib/cx";
 import { anchorAt, type BoardEvent } from "@/lib/realtime";
-import type { Attachment, Card, CardCover, CardFilters, CardInput, Column, Member, Project } from "@/types";
+import type { Attachment, Card, CardCover, CardFilters, CardInput, Column, Member, Project, Tag } from "@/types";
+import type { Planning } from "@/types/tasks";
 import s from "./Board.module.scss";
 
 // The editor (TipTap) and CRDT (Yjs) are heavy: load them when a task is first opened.
@@ -55,11 +58,28 @@ function Board({ project }: { project: Project }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [booting, setBooting] = useState(true);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [selectedUsers, setSelectedUsers] = useState<Set<number>>(new Set());
   const [showUnassigned, setShowUnassigned] = useState(false);
+  const [planFilter, setPlanFilter] = useState<{ milestone: number | null; sprint: number | null; version: number | null; tag: number | null }>({
+    milestone: null, sprint: null, version: null, tag: null,
+  });
+  const [planning, setPlanning] = useState<Planning>({ milestones: [], sprints: [], versions: [] });
+  const [tags, setTags] = useState<Tag[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [modal, setModal] = useState<ModalState>(null);
+  // Deep link to a task (?card=ID), e.g. from the backlog or time tracking.
+  const [params, setParams] = useSearchParams();
+  const linkedCard = Number(params.get("card")) || null;
+  useEffect(() => {
+    if (!linkedCard) return;
+    api
+      .card(linkedCard)
+      .then((card) => card.projectId === project.id && setModal({ cardId: card.id, columnId: card.columnId, snapshot: card }))
+      .catch(() => {});
+    setParams({}, { replace: true });
+  }, [linkedCard, project.id, setParams]);
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget>(null);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -73,9 +93,19 @@ function Board({ project }: { project: Project }) {
 
   const debouncedSearch = useDebounced(search, 300);
   const filters: CardFilters = useMemo(
-    () => ({ q: debouncedSearch, assignees: [...selectedUsers], unassigned: showUnassigned }),
-    [debouncedSearch, selectedUsers, showUnassigned],
+    () => ({
+      q: debouncedSearch, assignees: [...selectedUsers], unassigned: showUnassigned,
+      milestone: planFilter.milestone, sprint: planFilter.sprint, version: planFilter.version, tags: planFilter.tag ? [planFilter.tag] : [],
+    }),
+    [debouncedSearch, selectedUsers, showUnassigned, planFilter],
   );
+
+  // Milestones, sprints, versions and tags for the filters (and the task editor).
+  const loadPlanning = useCallback(() => {
+    tasksApi.planning(project.id).then(setPlanning).catch(() => {});
+    tasksApi.tags(project.id).then(setTags).catch(() => {});
+  }, [project.id]);
+  useEffect(loadPlanning, [loadPlanning]);
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
 
@@ -243,6 +273,7 @@ function Board({ project }: { project: Project }) {
         break;
       case "columns.changed":
         if (!mine) reset();
+        loadPlanning(); // planning or tags may have changed too
         break;
       case "members.changed":
         reloadMembers();
@@ -263,7 +294,8 @@ function Board({ project }: { project: Project }) {
     [members, me.id],
   );
 
-  const hasFilters = selectedUsers.size > 0 || showUnassigned || search.trim() !== "";
+  const hasFilters =
+    selectedUsers.size > 0 || showUnassigned || search.trim() !== "" || Object.values(planFilter).some((v) => v !== null);
   const totalVisible = cols.reduce((n, col) => n + col.total, 0);
 
   function toggleUser(id: number) {
@@ -279,6 +311,7 @@ function Board({ project }: { project: Project }) {
     setSelectedUsers(new Set());
     setShowUnassigned(false);
     setSearch("");
+    setPlanFilter({ milestone: null, sprint: null, version: null, tag: null });
   }
 
   function onMembersChanged(next: Member[]) {
@@ -472,6 +505,8 @@ function Board({ project }: { project: Project }) {
         }
       />
 
+      <ProjectTabs project={project} />
+
       <div className={s.toolbar}>
         <input className={s.search} placeholder={t("board.search")} value={search} onChange={(e) => setSearch(e.target.value)} />
 
@@ -489,6 +524,25 @@ function Board({ project }: { project: Project }) {
         <Button variant={onlyMine ? "selected" : "ghost"} size="sm" onClick={() => setSelectedUsers(onlyMine ? new Set() : new Set([me.id]))}>
           {t("board.onlyMine")}
         </Button>
+        <PlanFilter
+          label={t("tasks.anyMilestone")}
+          value={planFilter.milestone}
+          options={planning.milestones}
+          onChange={(milestone) => setPlanFilter((f) => ({ ...f, milestone }))}
+        />
+        <PlanFilter
+          label={t("tasks.anySprint")}
+          value={planFilter.sprint}
+          options={planning.sprints.filter((x) => x.status !== "past" || x.id === planFilter.sprint)}
+          onChange={(sprint) => setPlanFilter((f) => ({ ...f, sprint }))}
+        />
+        <PlanFilter
+          label={t("tasks.anyVersion")}
+          value={planFilter.version}
+          options={planning.versions.filter((x) => x.status !== "archived" || x.id === planFilter.version)}
+          onChange={(version) => setPlanFilter((f) => ({ ...f, version }))}
+        />
+        <PlanFilter label={t("tasks.anyTag")} value={planFilter.tag} options={tags} onChange={(tag) => setPlanFilter((f) => ({ ...f, tag }))} />
         {hasFilters && (
           <>
             <Muted>{t("board.found", { count: totalVisible })}</Muted>
@@ -500,6 +554,11 @@ function Board({ project }: { project: Project }) {
       </div>
 
       {error && <Banner onDismiss={() => setError("")}>{error}</Banner>}
+      {notice && (
+        <Banner tone="success" onDismiss={() => setNotice("")}>
+          {notice}
+        </Banner>
+      )}
 
       {booting ? (
         <Center>
@@ -529,6 +588,12 @@ function Board({ project }: { project: Project }) {
               onRename={(name) => columnAction(() => api.renameColumn(col.column.id, name))}
               onMove={(index) => columnAction(() => api.moveColumn(col.column.id, index))}
               onDelete={(moveTo) => columnAction(() => api.deleteColumn(col.column.id, moveTo), true)}
+              planning={planning}
+              onBulkChanged={(message, failed) => {
+                if (message) (failed ? setError : setNotice)(message);
+                reset();
+                loadPlanning();
+              }}
             />
           ))}
           {isOwner && <AddColumn onAdd={(name) => columnAction(() => api.createColumn(project.id, name))} />}
@@ -554,6 +619,15 @@ function Board({ project }: { project: Project }) {
             onUpdate={updateCard}
             onMove={moveCardTo}
             onDelete={deleteCard}
+            planning={planning}
+            tags={tags}
+            onCardChanged={replaceCard}
+            onCardAdded={(card) =>
+              patchCol(card.columnId, (col) => ({ cards: col.cursor === null ? [...col.cards, card] : col.cards, total: col.total + 1 }))
+            }
+            onCardRemoved={(card) =>
+              patchCol(card.columnId, (col) => ({ cards: col.cards.filter((c) => c.id !== card.id), total: Math.max(0, col.total - 1) }))
+            }
           />
         </Suspense>
       )}
@@ -576,5 +650,25 @@ function Board({ project }: { project: Project }) {
         />
       )}
     </div>
+  );
+}
+
+/** A compact select for one planning filter; hidden when the project has none of that kind. */
+function PlanFilter({ label, value, options, onChange }: {
+  label: string;
+  value: number | null;
+  options: { id: number; name: string }[];
+  onChange: (id: number | null) => void;
+}) {
+  if (options.length === 0 && value === null) return null;
+  return (
+    <select className={s.filter} value={value ?? ""} aria-label={label} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
+      <option value="">{label}</option>
+      {options.map((o) => (
+        <option key={o.id} value={o.id}>
+          {o.name}
+        </option>
+      ))}
+    </select>
   );
 }

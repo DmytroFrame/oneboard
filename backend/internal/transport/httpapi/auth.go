@@ -26,6 +26,70 @@ func (h *AuthHandler) Mount(public, private *echo.Group) {
 	public.POST("/auth/refresh", h.refresh)
 	public.POST("/auth/logout", h.logout)
 	private.GET("/auth/me", h.me)
+	public.POST("/auth/password-reset", h.requestReset)
+	public.GET("/auth/password-reset/:token", h.checkReset)
+	public.POST("/auth/password-reset/:token", h.reset)
+	private.PUT("/users/me/password", h.changePassword)
+	private.POST("/users/:id/password-reset", h.adminReset)
+}
+
+// requestReset always answers 204, so it can't be used to find out who has an account.
+func (h *AuthHandler) requestReset(c *echo.Context) error {
+	var in struct {
+		Email string `json:"email"`
+	}
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	if err := h.auth.RequestPasswordReset(c.Request().Context(), in.Email); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (h *AuthHandler) checkReset(c *echo.Context) error {
+	if err := h.auth.CheckResetToken(c.Request().Context(), c.Param("token")); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (h *AuthHandler) reset(c *echo.Context) error {
+	var in struct {
+		Password string `json:"password"`
+	}
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	if err := h.auth.ResetPassword(c.Request().Context(), c.Param("token"), in.Password); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (h *AuthHandler) changePassword(c *echo.Context) error {
+	var in struct {
+		CurrentPassword string `json:"currentPassword"`
+		NewPassword     string `json:"newPassword"`
+	}
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	if err := h.auth.ChangePassword(c.Request().Context(), currentUser(c).ID, in.CurrentPassword, in.NewPassword); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (h *AuthHandler) adminReset(c *echo.Context) error {
+	id, err := pathID(c, "id")
+	if err != nil {
+		return err
+	}
+	if err := h.auth.AdminResetPassword(c.Request().Context(), currentUser(c), id); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 type credentials struct {
@@ -40,7 +104,11 @@ func (h *AuthHandler) respond(c *echo.Context, status int, s auth.Session) error
 		h.mw.setRefreshCookie(c.Response(), s.Refresh)
 	}
 	c.Response().Header().Set("Cache-Control", "no-store")
-	return c.JSON(status, sessionDTO{User: h.present.Me(s.User), AccessToken: s.Access.Value, ExpiresAt: s.Access.ExpiresAt})
+	u, ms, err := h.auth.Account(c.Request().Context(), s.User, orgHeader(c.Request()))
+	if err != nil {
+		return err
+	}
+	return c.JSON(status, sessionDTO{User: h.present.Me(u, ms), AccessToken: s.Access.Value, ExpiresAt: s.Access.ExpiresAt})
 }
 
 func (h *AuthHandler) register(c *echo.Context) error {
@@ -88,5 +156,10 @@ func (h *AuthHandler) logout(c *echo.Context) error {
 }
 
 func (h *AuthHandler) me(c *echo.Context) error {
-	return c.JSON(http.StatusOK, h.present.Me(currentUser(c)))
+	u := currentUser(c)
+	u, ms, err := h.auth.Account(c.Request().Context(), u, u.OrgID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, h.present.Me(u, ms))
 }

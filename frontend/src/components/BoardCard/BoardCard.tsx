@@ -6,6 +6,7 @@ import { PaperclipIcon } from "@/components/ui/icons";
 import { PlayBadge } from "@/components/ui/PlayBadge/PlayBadge";
 import { Spacer } from "@/components/ui/Spacer/Spacer";
 import { cx } from "@/lib/cx";
+import { formatMinutes } from "@/lib/format";
 import type { Card, User } from "@/types";
 import s from "./BoardCard.module.scss";
 
@@ -45,6 +46,15 @@ export function BoardCard({ card, assignee, dragging, remoteDrag, onDragStart, o
           )}
         </div>
       )}
+      {card.tags.length > 0 && (
+        <div className={s.tags}>
+          {card.tags.map((tag) => (
+            <span key={tag.id} className={s.tag} style={{ background: tag.color }} title={tag.name}>
+              {tag.name}
+            </span>
+          ))}
+        </div>
+      )}
       <div className={s.title}>{card.title}</div>
       <div className={s.footer}>
         <PriorityIcon priority={card.priority} />
@@ -55,7 +65,27 @@ export function BoardCard({ card, assignee, dragging, remoteDrag, onDragStart, o
             {card.attachmentCount}
           </span>
         )}
+        {card.checklistTotal > 0 && (
+          <span className={cx(s.meta, card.checklistDone === card.checklistTotal && s.metaDone)} title={t("tasks.checklists")}>
+            ☑ {card.checklistDone}/{card.checklistTotal}
+          </span>
+        )}
+        {card.commentCount > 0 && (
+          <span className={s.meta} title={t("tasks.tabCommentsActivity")}>
+            💬 {card.commentCount}
+          </span>
+        )}
+        {card.trackedMinutes > 0 && (
+          <span className={s.meta} title={t("tasks.tracked")}>
+            ⏱ {formatMinutes(card.trackedMinutes)}
+          </span>
+        )}
         <Spacer />
+        {card.storyPoints != null && (
+          <span className={s.points} title={t("tasks.storyPoints")}>
+            {card.storyPoints}
+          </span>
+        )}
         <Avatar user={assignee} size={24} />
       </div>
     </article>

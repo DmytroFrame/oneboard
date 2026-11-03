@@ -1,0 +1,55 @@
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+
+  @include mobile {
+    flex-wrap: wrap;
+  }
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+
+  h1 {
+    font-size: 26px;
+    margin: 4px 0 2px;
+  }
+}
+
+.sub {
+  color: var(--text-subtle);
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.notice {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--success-text);
+}
+
+.menuWrap {
+  position: relative;
+}
+
+.menu {
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}

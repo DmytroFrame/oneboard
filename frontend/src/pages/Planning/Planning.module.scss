@@ -1,0 +1,81 @@
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-subtle);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 0;
+
+  & + & {
+    border-top: 1px solid var(--separator);
+  }
+
+  @include mobile {
+    flex-wrap: wrap;
+  }
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+
+  small {
+    color: var(--text-subtle);
+    font-size: 12px;
+  }
+}
+
+.name {
+  font-weight: 650;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.text {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-subtle);
+}
+
+.progressWrap {
+  width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  small {
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+}
+
+.progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--separator);
+  overflow: hidden;
+
+  span {
+    display: block;
+    height: 100%;
+    background: var(--success);
+  }
+}
+
+.actions {
+  display: flex;
+  gap: 4px;
+}

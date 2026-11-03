@@ -1,0 +1,42 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+
+  @include mobile {
+    grid-template-columns: 1fr;
+  }
+}
+
+.attrs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.attr {
+  @include bare-button;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--separator);
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text-subtle);
+
+  &:hover {
+    color: var(--text);
+  }
+}
+
+.on {
+  @include glass-selected;
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.profile {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}

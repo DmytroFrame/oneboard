@@ -40,6 +40,23 @@ type Config struct {
 	ACMEWebroot   string
 	Seed          bool
 	SecureCookies bool
+	// PlatformAdmins (emails) run the installation: database backups, schema, versions. They are not
+	// a role in any organization.
+	PlatformAdmins []string
+
+	// AppURL is the public address of the web app, used in links sent by email (password reset).
+	AppURL string
+	// Outgoing mail. SMTPHost "" = emails are only written to the log (development without Mailpit).
+	SMTPHost     string
+	SMTPPort     string
+	SMTPUsername string
+	SMTPPassword string
+	MailFrom     string
+
+	// Database backups (admin panel): one is made on schedule every BackupEvery (0 = only by hand),
+	// and by hand at most once per BackupMinGap.
+	BackupEvery  time.Duration
+	BackupMinGap time.Duration
 
 	JWTSecret       []byte
 	AccessTokenTTL  time.Duration
@@ -177,6 +194,12 @@ func Load() (Config, error) {
 		StaticDir:     env("STATIC_DIR", "../frontend/dist"),
 		Seed:          env("SEED", pick("1", "0")) == "1",
 		SecureCookies: env("SECURE_COOKIES", secureDefault) == "1",
+		AppURL:        strings.TrimRight(env("APP_URL", pick("http://localhost:5173", "")), "/"),
+		SMTPHost:      env("SMTP_HOST", ""),
+		SMTPPort:      env("SMTP_PORT", "587"),
+		SMTPUsername:  env("SMTP_USERNAME", ""),
+		SMTPPassword:  env("SMTP_PASSWORD", ""),
+		MailFrom:      env("MAIL_FROM", "OneBoard <no-reply@oneboard.local>"),
 
 		TLSCertFile: certFile,
 		TLSKeyFile:  keyFile,
@@ -216,6 +239,16 @@ func Load() (Config, error) {
 		S3Bucket:         env("S3_BUCKET", env("RUSTFS_BUCKET", "oneboard")),
 		S3ForcePathStyle: env("S3_FORCE_PATH_STYLE", boolStr(s3Endpoint != "")) == "1",
 		S3CreateBucket:   env("S3_CREATE_BUCKET", pick("1", "0")) == "1",
+	}
+
+	for _, e := range splitList(env("PLATFORM_ADMINS", pick("demo@example.com", ""))) {
+		c.PlatformAdmins = append(c.PlatformAdmins, strings.ToLower(e))
+	}
+	if c.BackupEvery, err = time.ParseDuration(env("BACKUP_EVERY", "24h")); err != nil {
+		return Config{}, fmt.Errorf("BACKUP_EVERY: %w", err)
+	}
+	if c.BackupMinGap, err = time.ParseDuration(env("BACKUP_MIN_GAP", "1h")); err != nil {
+		return Config{}, fmt.Errorf("BACKUP_MIN_GAP: %w", err)
 	}
 
 	turnTTL, err := time.ParseDuration(env("TURN_CREDENTIAL_TTL", "12h"))

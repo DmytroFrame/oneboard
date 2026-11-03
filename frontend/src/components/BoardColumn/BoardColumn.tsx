@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { BoardCard } from "@/components/BoardCard/BoardCard";
+import { BulkMoveModal } from "@/components/BulkMoveModal/BulkMoveModal";
 import { Button } from "@/components/ui/Button/Button";
 import { IconButton } from "@/components/ui/IconButton/IconButton";
 import { Menu } from "@/components/ui/Menu/Menu";
@@ -9,7 +10,9 @@ import { Spacer } from "@/components/ui/Spacer/Spacer";
 import { Spinner } from "@/components/ui/Spinner/Spinner";
 import { useClickOutside } from "@/hooks/useClickOutside";
 import { cx } from "@/lib/cx";
-import type { Card, Column, User } from "@/types";
+import { tasksApi } from "@/lib/api/tasks";
+import { COLUMN_STATUSES, type Card, type Column, type ColumnStatus, type User } from "@/types";
+import type { Planning } from "@/types/tasks";
 import s from "./BoardColumn.module.scss";
 
 export interface ColumnState {
@@ -40,6 +43,9 @@ interface Props {
   onRename: (name: string) => Promise<void>;
   onMove: (index: number) => Promise<void>;
   onDelete: (moveTo: number | null) => Promise<void>;
+  planning: Planning;
+  /** Columns changed in bulk (status, mass move): reload the board. */
+  onBulkChanged: (message?: string, failed?: boolean) => void;
 }
 
 export function BoardColumn(props: Props) {
@@ -48,7 +54,8 @@ export function BoardColumn(props: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [menu, setMenu] = useState<"closed" | "open" | "delete">("closed");
+  const [menu, setMenu] = useState<"closed" | "open" | "delete" | "status">("closed");
+  const [bulk, setBulk] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(state.column.name);
   const others = allColumns.filter((c) => c.id !== state.column.id);
@@ -100,7 +107,7 @@ export function BoardColumn(props: Props) {
             />
           </form>
         ) : (
-          <span className={s.title} onDoubleClick={() => isOwner && setRenaming(true)}>
+          <span className={s.title} onDoubleClick={() => isOwner && setRenaming(true)} title={t(`tasks.statuses.${state.column.status}`)}>
             {state.column.name}
           </span>
         )}
@@ -120,6 +127,12 @@ export function BoardColumn(props: Props) {
                 <MenuItem disabled={index === allColumns.length - 1} onClick={() => (setMenu("closed"), props.onMove(index + 1))}>
                   {t("column.moveRight")}
                 </MenuItem>
+                <MenuItem onClick={() => setMenu("status")}>
+                  {t("tasks.columnStatus")}: {t(`tasks.statuses.${state.column.status}`)}
+                </MenuItem>
+                <MenuItem disabled={state.total === 0} onClick={() => (setMenu("closed"), setBulk(true))}>
+                  {t("tasks.bulkMove")}
+                </MenuItem>
                 <MenuItem
                   danger
                   disabled={others.length === 0}
@@ -130,6 +143,23 @@ export function BoardColumn(props: Props) {
                 >
                   {t("column.delete")}
                 </MenuItem>
+              </Menu>
+            )}
+            {menu === "status" && (
+              <Menu align="right" className={s.menu}>
+                {COLUMN_STATUSES.map((st) => (
+                  <MenuItem
+                    key={st}
+                    aria-pressed={st === state.column.status}
+                    onClick={() => {
+                      setMenu("closed");
+                      tasksApi.setColumnStatus(state.column.id, st as ColumnStatus).then(() => props.onBulkChanged(), (err) => props.onBulkChanged(err.message, true));
+                    }}
+                  >
+                    {st === state.column.status ? "✓ " : ""}
+                    {t(`tasks.statuses.${st}`)}
+                  </MenuItem>
+                ))}
               </Menu>
             )}
             {menu === "delete" && (
@@ -158,6 +188,16 @@ export function BoardColumn(props: Props) {
           </div>
         )}
       </div>
+
+      {bulk && (
+        <BulkMoveModal
+          column={state.column}
+          columns={allColumns}
+          planning={props.planning}
+          onClose={() => setBulk(false)}
+          onDone={(moved) => props.onBulkChanged(t("tasks.bulkMoved", { count: moved }))}
+        />
+      )}
 
       {/* data-column-body: edge auto-scroll while dragging on touch screens (lib/touch.ts). */}
       <div className={s.body} ref={bodyRef} data-column-body>

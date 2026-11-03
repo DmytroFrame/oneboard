@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/labstack/echo/v5"
 
@@ -60,11 +59,9 @@ func (h *CardHandler) list(c *echo.Context) error {
 		Unassigned: c.QueryParam("unassigned") == "1",
 	}
 	query.Limit, _ = strconv.Atoi(c.QueryParam("limit"))
-	for _, part := range strings.Split(c.QueryParam("assignees"), ",") {
-		if id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64); err == nil {
-			query.Assignees = append(query.Assignees, id)
-		}
-	}
+	query.Assignees = idList(c.QueryParam("assignees"))
+	query.TagIDs = idList(c.QueryParam("tags"))
+	query.MilestoneID, query.SprintID, query.VersionID = optID(c.QueryParam("milestone")), optID(c.QueryParam("sprint")), optID(c.QueryParam("version"))
 	if cursor := c.QueryParam("cursor"); cursor != "" {
 		var cur domain.CardCursor
 		if _, err := fmt.Sscanf(cursor, "%d:%d", &cur.Position, &cur.ID); err != nil {
@@ -161,7 +158,7 @@ func (h *CardHandler) delete(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := h.cards.Delete(c.Request().Context(), currentUser(c).ID, id); err != nil {
+	if err := h.cards.Delete(c.Request().Context(), currentUser(c), id); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)

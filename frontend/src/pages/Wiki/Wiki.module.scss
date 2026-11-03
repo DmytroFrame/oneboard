@@ -1,0 +1,50 @@
+.title {
+  font-size: 28px;
+  margin: 4px 0 0;
+}
+
+.flush {
+  margin: 0;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+
+  @include mobile {
+    grid-template-columns: 1fr;
+  }
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+  li {
+    display: flex;
+    flex-direction: column;
+    padding: 6px 8px;
+    border-radius: var(--r-md);
+
+    &:hover {
+      background: var(--hover);
+    }
+  }
+
+  a {
+    font-weight: 550;
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  small {
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+}

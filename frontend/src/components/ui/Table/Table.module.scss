@@ -1,0 +1,59 @@
+.wrap {
+  @include glass-panel;
+  border-radius: var(--r-lg);
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+
+  th,
+  td {
+    padding: 10px 14px;
+    text-align: left;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+
+  th {
+    @include eyebrow(11px);
+    color: var(--text-subtle);
+    border-bottom: 1px solid var(--separator);
+    position: sticky;
+    top: 0;
+  }
+
+  tbody tr + tr td {
+    border-top: 1px solid var(--separator);
+  }
+
+  tbody tr:hover td {
+    background: var(--hover);
+  }
+
+  tfoot td {
+    border-top: 2px solid var(--separator);
+    font-weight: 650;
+  }
+}
+
+.sort {
+  @include bare-button;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+
+  span {
+    opacity: 0.45;
+  }
+}
+
+.sorted span {
+  opacity: 1;
+  color: var(--accent);
+}

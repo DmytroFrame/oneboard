@@ -10,7 +10,11 @@ import { FormError } from "@/components/ui/FormError/FormError";
 import { InlineForm } from "@/components/ui/InlineForm/InlineForm";
 import { Modal, ModalContent } from "@/components/ui/Modal/Modal";
 import { Muted } from "@/components/ui/Muted/Muted";
+import { ProjectDetailsForm } from "@/components/ProjectDetailsForm/ProjectDetailsForm";
+import { TagManager } from "@/components/TagManager/TagManager";
+import { useAuth } from "@/context/auth";
 import { api } from "@/lib/api";
+import { can } from "@/lib/companyRoles";
 import type { Member, OrgMember, Project } from "@/types";
 import s from "./ProjectSettingsModal.module.scss";
 
@@ -27,7 +31,11 @@ interface Props {
 /** A project's name, members (added from its organization) and leaving / deleting it. */
 export function ProjectSettingsModal({ project, members, currentUserId, onClose, onMembersChanged, onProjectChanged, onLeftOrDeleted }: Props) {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const isOwner = project.role === "owner";
+  // Company managers run projects they belong to (OmiTeam's editProject); admins of members too.
+  const canManage = isOwner || can(user, "editProject");
+  const canSetRoles = isOwner || can(user, "addProjectMembers");
   const [orgMembers, setOrgMembers] = useState<OrgMember[] | null>(null);
   const [query, setQuery] = useState("");
   const [name, setName] = useState(project.name);
@@ -105,12 +113,38 @@ export function ProjectSettingsModal({ project, members, currentUserId, onClose,
           </section>
         )}
 
+        {canManage && (
+          <section>
+            <h3>{t("projects.details")}</h3>
+            <ProjectDetailsForm project={project} onSaved={onProjectChanged} />
+          </section>
+        )}
+
+        {(canManage || project.role === "admin") && (
+          <section>
+            <h3>{t("tasks.manageTags")}</h3>
+            <TagManager projectId={project.id} />
+          </section>
+        )}
+
         <section>
           <h3>{t("project.members", { count: members.length })}</h3>
           <MemberList>
             {members.map((m) => (
               <MemberRow key={m.id} avatar={<Avatar user={m} size={32} />} name={m.name} note={m.id === currentUserId && t("common.you")} detail={m.email}>
-                <RoleChip role={m.role} label={t(`roles.${m.role}`)} size="md" />
+                {canSetRoles && m.role !== "owner" ? (
+                  <select
+                    className={s.role}
+                    value={m.role}
+                    disabled={busy}
+                    onChange={(e) => run(async () => onMembersChanged(await api.setMemberRole(project.id, m.id, e.target.value as "admin" | "member")))}
+                  >
+                    <option value="member">{t("projects.roleMember")}</option>
+                    <option value="admin">{t("projects.roleAdmin")}</option>
+                  </select>
+                ) : (
+                  <RoleChip role={m.role || "member"} label={t(`roles.${m.role || "member"}` as "roles.member")} size="md" />
+                )}
                 {isOwner && m.role !== "owner" && (
                   <Button variant="danger" size="sm" onClick={() => remove(m)} disabled={busy}>
                     {t("common.remove")}

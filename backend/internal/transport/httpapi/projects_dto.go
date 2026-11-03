@@ -19,6 +19,19 @@ type projectDTO struct {
 	MemberCount      int         `json:"memberCount"`
 	CardCount        int         `json:"cardCount"`
 	CreatedAt        time.Time   `json:"createdAt"`
+	projectSettingsDTO
+	Pinned bool `json:"pinned"`
+}
+
+type projectSettingsDTO struct {
+	Client      string                 `json:"client"`
+	Description string                 `json:"description"`
+	StartDate   *domain.Date           `json:"startDate"`
+	Active      bool                   `json:"active"`
+	Billable    bool                   `json:"billable"`
+	BudgetHours *float64               `json:"budgetHours"`
+	IsMain      bool                   `json:"isMain"`
+	Sections    domain.ProjectSections `json:"sections"`
 }
 
 type memberDTO struct {
@@ -28,7 +41,8 @@ type memberDTO struct {
 }
 
 func toProject(p domain.Project) projectDTO {
-	return projectDTO{p.ID, p.OrgID, p.OrgName, p.Name, p.Key, p.OwnerID, p.Role, p.MemberCount, p.CardCount, p.CreatedAt}
+	return projectDTO{p.ID, p.OrgID, p.OrgName, p.Name, p.Key, p.OwnerID, p.Role, p.MemberCount, p.CardCount, p.CreatedAt,
+		projectSettingsDTO(p.ProjectSettings), p.Pinned}
 }
 
 func (p *Presenter) Members(ms []domain.Member) []memberDTO {

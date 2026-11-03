@@ -116,3 +116,186 @@
   flex-direction: column;
   gap: 4px;
 }
+
+// ---------- task details ----------
+
+.twoFields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+
+  input {
+    width: 100%;
+  }
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 590;
+  color: var(--text-subtle);
+}
+
+.tagPicker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tagOption {
+  @include bare-button;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-subtle);
+  border: 1px solid color-mix(in srgb, var(--tag) 45%, transparent);
+}
+
+.tagOn {
+  color: #fff;
+  background: var(--tag);
+}
+
+.templatePick {
+  width: 100%;
+}
+
+// ---------- checklists & activity ----------
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.blockHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.checklist {
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--hover);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.checklistHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.collapse {
+  @include bare-button;
+  flex: 1;
+  text-align: left;
+  font-weight: 650;
+}
+
+.progressText {
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+
+.progress {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--separator);
+  overflow: hidden;
+
+  span {
+    display: block;
+    height: 100%;
+    background: var(--success);
+    transition: width 0.2s;
+  }
+}
+
+.items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+  li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+  }
+}
+
+.itemDone {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.feed {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.comment {
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--hover);
+}
+
+.commentHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+
+  span {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+}
+
+.commentBody {
+  margin-top: 4px;
+  font-size: 14px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.commentForm {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+
+  textarea {
+    flex: 1;
+  }
+}
+
+.historyRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+
+  small {
+    color: var(--text-subtle);
+    white-space: nowrap;
+  }
+}

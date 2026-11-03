@@ -1,0 +1,28 @@
+.log {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  font-size: 13px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--separator);
+}
+
+.who {
+  font-weight: 600;
+}
+
+.when {
+  color: var(--text-subtle);
+}
+
+.comment {
+  flex: 1;
+  color: var(--text-subtle);
+}

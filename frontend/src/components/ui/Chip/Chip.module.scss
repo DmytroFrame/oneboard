@@ -1,0 +1,41 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.neutral {
+  background: var(--hover);
+  color: var(--text-subtle);
+}
+
+.accent {
+  background: var(--selected-bg);
+  color: var(--selected-text);
+}
+
+.success {
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success-text);
+}
+
+.warning {
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
+  color: var(--warning-text);
+}
+
+.danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.colored {
+  background: color-mix(in srgb, var(--chip) 18%, transparent);
+  color: color-mix(in srgb, var(--chip) 80%, var(--text));
+  border: 1px solid color-mix(in srgb, var(--chip) 35%, transparent);
+}

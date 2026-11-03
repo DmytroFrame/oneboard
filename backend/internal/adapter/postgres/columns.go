@@ -13,12 +13,12 @@ type ColumnRepo struct{ db *DB }
 func NewColumnRepo(db *DB) *ColumnRepo { return &ColumnRepo{db: db} }
 
 const columnSelect = `
-	SELECT bc.id, bc.project_id, bc.name, bc.position, (SELECT COUNT(*) FROM cards WHERE column_id = bc.id)
+	SELECT bc.id, bc.project_id, bc.name, bc.position, (SELECT COUNT(*) FROM cards WHERE column_id = bc.id AND NOT is_template), bc.status
 	FROM board_columns bc`
 
 func scanColumn(row pgx.Row) (domain.Column, error) {
 	var c domain.Column
-	err := row.Scan(&c.ID, &c.ProjectID, &c.Name, &c.Position, &c.CardCount)
+	err := row.Scan(&c.ID, &c.ProjectID, &c.Name, &c.Position, &c.CardCount, &c.Status)
 	return c, mapErr(err)
 }
 
@@ -42,16 +42,18 @@ func (r *ColumnRepo) Count(ctx context.Context, projectID int64) (int, error) {
 
 func (r *ColumnRepo) Create(ctx context.Context, projectID int64, name string) error {
 	return exec(ctx, r.db, `
-		INSERT INTO board_columns (project_id, name, position)
-		VALUES ($1, $2, (SELECT COALESCE(MAX(position), -1) + 1 FROM board_columns WHERE project_id = $1))`,
-		projectID, name)
+		INSERT INTO board_columns (project_id, name, position, status)
+		VALUES ($1, $2, (SELECT COALESCE(MAX(position), -1) + 1 FROM board_columns WHERE project_id = $1), $3)`,
+		projectID, name, domain.StatusForName(name))
 }
 
 func (r *ColumnRepo) CreateMany(ctx context.Context, projectID int64, names []string) error {
 	return exec(ctx, r.db, `
-		INSERT INTO board_columns (project_id, name, position)
-		SELECT $1, name, ord - 1 FROM unnest($2::text[]) WITH ORDINALITY AS t(name, ord)`,
-		projectID, names)
+		INSERT INTO board_columns (project_id, name, position, status)
+		SELECT $1, t.name, t.ord - 1, s.status
+		FROM unnest($2::text[]) WITH ORDINALITY AS t(name, ord)
+		JOIN unnest($3::text[]) WITH ORDINALITY AS s(status, ord) ON s.ord = t.ord`,
+		projectID, names, statusesFor(names))
 }
 
 func (r *ColumnRepo) Rename(ctx context.Context, columnID int64, name string) error {
@@ -72,4 +74,12 @@ func (r *ColumnRepo) Delete(ctx context.Context, columnID int64) error {
 func (r *ColumnRepo) Lock(ctx context.Context, columnID int64) error {
 	var id int64
 	return mapErr(r.db.q(ctx).QueryRow(ctx, `SELECT id FROM board_columns WHERE id = $1 FOR UPDATE`, columnID).Scan(&id))
+}
+
+func statusesFor(names []string) []string {
+	out := make([]string, len(names))
+	for i, n := range names {
+		out[i] = string(domain.StatusForName(n))
+	}
+	return out
 }

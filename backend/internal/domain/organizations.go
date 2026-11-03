@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"slices"
 	"strings"
 	"time"
 )
@@ -8,60 +9,22 @@ import (
 type Organization struct {
 	ID           int64
 	Name         string
-	Role         OrgRole // the current user's role
+	Role         CompanyRole // the current user's role there
 	MemberCount  int
 	ProjectCount int
 	CreatedAt    time.Time
 }
 
-type OrgRole string
+// Managing an organization uses the company roles of its members (company.go): owners and admins
+// rename it, owners delete it; inviting, removing and changing roles follow the permission matrix.
+func (u User) ManagesOrg() bool { return u.Role == CompanyOwner || u.Role == CompanyAdmin }
 
-const (
-	OrgRoleNone   OrgRole = ""
-	OrgRoleOwner  OrgRole = "owner"
-	OrgRoleAdmin  OrgRole = "admin"
-	OrgRoleMember OrgRole = "member"
-)
-
-func (r OrgRole) Valid() bool {
-	return r == OrgRoleOwner || r == OrgRoleAdmin || r == OrgRoleMember
-}
-
-// The organization permission matrix:
-//
-//	                 owner  admin  member
-//	invite people      ✓      ✓ (admin/member roles only)
-//	remove people      ✓      ✓ (members only)
-//	change roles       ✓
-//	create projects    ✓      ✓
-//	rename             ✓      ✓
-//	delete             ✓
-func (r OrgRole) CanInvite() bool         { return r == OrgRoleOwner || r == OrgRoleAdmin }
-func (r OrgRole) CanManageRoles() bool    { return r == OrgRoleOwner }
-func (r OrgRole) CanCreateProjects() bool { return r == OrgRoleOwner || r == OrgRoleAdmin }
-func (r OrgRole) CanRename() bool         { return r == OrgRoleOwner || r == OrgRoleAdmin }
-func (r OrgRole) CanDelete() bool         { return r == OrgRoleOwner }
-
-// CanGrant reports whether someone with role r may hand out role target (on invite).
-func (r OrgRole) CanGrant(target OrgRole) bool {
-	switch r {
-	case OrgRoleOwner:
-		return target.Valid()
-	case OrgRoleAdmin:
-		return target == OrgRoleAdmin || target == OrgRoleMember
+// CanInviteAs reports whether u may invite someone with the given role (candidates included).
+func (u User) CanInviteAs(role CompanyRole) bool {
+	if !u.Can(PermAddUser) {
+		return false
 	}
-	return false
-}
-
-// CanRemove reports whether someone with role r may remove a member with role target.
-func (r OrgRole) CanRemove(target OrgRole) bool {
-	switch r {
-	case OrgRoleOwner:
-		return true
-	case OrgRoleAdmin:
-		return target == OrgRoleMember
-	}
-	return false
+	return role == CompanyCandidate || slices.Contains(u.AssignableRoles(), role)
 }
 
 func NormalizeOrgName(name string) (string, error) {
@@ -72,9 +35,9 @@ func NormalizeOrgName(name string) (string, error) {
 	return name, nil
 }
 
+// OrgMember is a person with their membership filled in (User.OrgID, Role…).
 type OrgMember struct {
 	User
-	Role    OrgRole
 	AddedAt time.Time
 }
 
@@ -82,7 +45,7 @@ type Invitation struct {
 	ID        int64
 	OrgID     int64
 	Email     string
-	Role      OrgRole
+	Role      CompanyRole
 	InvitedBy *int64
 	CreatedAt time.Time
 }

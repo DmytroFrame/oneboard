@@ -1,0 +1,68 @@
+.filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+
+  select {
+    width: auto;
+  }
+}
+
+.search {
+  width: 220px;
+
+  @include mobile {
+    width: 100%;
+  }
+}
+
+.switch {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.num {
+  text-align: right !important;
+  white-space: nowrap;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.caret {
+  display: inline-block;
+  width: 16px;
+  color: var(--text-subtle);
+}
+
+.role {
+  font-size: 11px;
+  color: var(--text-subtle);
+}
+
+.detail td {
+  font-size: 13px;
+  color: var(--text-subtle);
+
+  &:first-child {
+    padding-left: 32px;
+  }
+}
+
+.negative {
+  color: var(--success) !important;
+}
+
+.warn {
+  color: var(--warning) !important;
+}
+
+.formula {
+  margin: 0;
+  font-size: 13px;
+}

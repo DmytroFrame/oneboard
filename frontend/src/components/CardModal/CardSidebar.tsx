@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Avatar } from "@/components/Avatar/Avatar";
 import { Field } from "@/components/ui/Field/Field";
@@ -17,9 +17,11 @@ interface Props {
   onColumn: (id: number) => void;
   onPriority: (p: Priority) => void;
   onAssignee: (id: number | null) => void;
+  /** More fields below the standard ones (task details). */
+  children?: ReactNode;
 }
 
-export function CardSidebar({ columns, users, columnId, priority, assigneeId, author, card, onColumn, onPriority, onAssignee }: Props) {
+export function CardSidebar({ columns, users, columnId, priority, assigneeId, author, card, onColumn, onPriority, onAssignee, children }: Props) {
   const { t, i18n } = useTranslation();
   const dateFmt = useMemo(() => new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeStyle: "short" }), [i18n.language]);
   const assignee = users.find((u) => u.id === assigneeId);
@@ -62,6 +64,7 @@ export function CardSidebar({ columns, users, columnId, priority, assigneeId, au
           <span>{author?.name ?? t("common.formerMember")}</span>
         </div>
       </Field>
+      {children}
       {card && (
         <div className={s.meta}>
           <div>{t("card.created", { date: dateFmt.format(new Date(card.createdAt)) })}</div>

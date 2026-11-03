@@ -48,6 +48,9 @@ export default function Login() {
         </Button>
       </Form>
       <AuthNote>
+        <Link to="/forgot-password">{t("auth.forgotPassword")}</Link>
+      </AuthNote>
+      <AuthNote>
         {t("auth.demoAccount")} <code>demo@example.com</code> / <code>demo1234</code>
       </AuthNote>
       <AuthNote>

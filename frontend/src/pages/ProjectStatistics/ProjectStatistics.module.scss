@@ -1,0 +1,56 @@
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-subtle);
+  margin-right: 4px;
+}
+
+.column {
+  @include bare-button;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--separator);
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text-subtle);
+
+  &:hover {
+    color: var(--text);
+  }
+}
+
+.on {
+  @include glass-selected;
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.overall {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-subtle);
+
+  strong {
+    font-size: 24px;
+    color: var(--text);
+  }
+}
+
+.num {
+  text-align: right !important;
+}

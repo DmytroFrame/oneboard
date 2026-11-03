@@ -61,6 +61,9 @@ func (s *ColumnService) Create(ctx context.Context, userID, projectID int64, nam
 	if n >= domain.MaxColumnsPerProject {
 		return nil, domain.ErrColumnLimit
 	}
+	if err := s.uniqueName(ctx, projectID, 0, name); err != nil {
+		return nil, err
+	}
 	if err := s.columns.Create(ctx, projectID, name); err != nil {
 		return nil, err
 	}
@@ -82,6 +85,9 @@ func (s *ColumnService) Rename(ctx context.Context, userID, columnID int64, name
 		return nil, err
 	}
 	if name, err = validColumnName(name); err != nil {
+		return nil, err
+	}
+	if err := s.uniqueName(ctx, col.ProjectID, col.ID, name); err != nil {
 		return nil, err
 	}
 	if err := s.columns.Rename(ctx, col.ID, name); err != nil {
@@ -161,4 +167,18 @@ func (s *ColumnService) Delete(ctx context.Context, userID, columnID int64, move
 		return nil, err
 	}
 	return s.changed(ctx, userID, col.ProjectID)
+}
+
+// uniqueName refuses a second column with the same name (ignoring case) in a project.
+func (s *ColumnService) uniqueName(ctx context.Context, projectID, exceptID int64, name string) error {
+	cols, err := s.columns.List(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	for _, c := range cols {
+		if c.ID != exceptID && strings.EqualFold(c.Name, name) {
+			return domain.ErrColumnNameTaken
+		}
+	}
+	return nil
 }

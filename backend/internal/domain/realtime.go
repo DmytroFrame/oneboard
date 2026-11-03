@@ -40,6 +40,10 @@ const (
 	UserOrgMembersChanged UserEventType = "org.members"
 	// UserVoiceChanged: who is in the voice room of one of the user's projects changed.
 	UserVoiceChanged UserEventType = "voice"
+	// UserAccountChanged: the user's own account changed (company role): their tabs reload it.
+	UserAccountChanged UserEventType = "account"
+	// UserVacationsChanged: an absence request the user made or reviews changed.
+	UserVacationsChanged UserEventType = "vacations"
 )
 
 type AccessReason string

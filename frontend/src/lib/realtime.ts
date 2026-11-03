@@ -33,7 +33,7 @@ type Handler = (m: Message) => void;
 
 /** A change to the signed-in user's access, delivered on their user channel. */
 export interface UserEvent {
-  type: "access" | "org.members" | "voice";
+  type: "access" | "org.members" | "voice" | "account" | "vacations";
   reason: "added" | "removed" | "role" | "renamed" | "deleted" | "";
   orgId: number;
   projectId: number;

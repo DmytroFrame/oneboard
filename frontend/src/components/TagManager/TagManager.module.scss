@@ -1,0 +1,23 @@
+.manager {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  input:not([type="color"]) {
+    flex: 1;
+    padding: 6px 10px;
+  }
+
+  input[type="color"] {
+    width: 34px;
+    height: 30px;
+    padding: 2px;
+    border-radius: 8px;
+  }
+}

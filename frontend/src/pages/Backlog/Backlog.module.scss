@@ -1,0 +1,39 @@
+.filters {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+
+  select {
+    width: auto;
+  }
+}
+
+.search {
+  width: 260px;
+  border-radius: 999px;
+
+  @include mobile {
+    width: 100%;
+  }
+}
+
+.key {
+  font-weight: 650;
+  color: var(--text-subtle);
+}
+
+.title {
+  white-space: normal !important;
+  width: 100%;
+
+  a {
+    color: var(--text);
+    text-decoration: none;
+    font-weight: 550;
+    margin-right: 8px;
+  }
+
+  > span {
+    margin-right: 4px;
+  }
+}

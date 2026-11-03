@@ -1,0 +1,43 @@
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--hover);
+  overflow-x: auto;
+  scrollbar-width: none;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.tab {
+  @include bare-button;
+  position: relative;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 590;
+  color: var(--text-subtle);
+  white-space: nowrap;
+  transition: background 0.2s, color 0.2s;
+
+  &:hover {
+    color: var(--text);
+  }
+}
+
+.active {
+  @include glass-selected;
+  color: var(--text);
+  border: 1px solid var(--glass-border);
+}
+
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--danger);
+  vertical-align: middle;
+}

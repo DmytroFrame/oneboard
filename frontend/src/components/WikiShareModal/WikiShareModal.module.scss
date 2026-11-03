@@ -1,0 +1,50 @@
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+
+  input {
+    width: auto;
+  }
+}
+
+.flush {
+  margin: 0;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  select {
+    width: auto;
+  }
+}
+
+.groupIcon {
+  width: 26px;
+  text-align: center;
+}
+
+.name {
+  @include ellipsis;
+  flex: 1;
+  font-size: 14px;
+}
+
+.add {
+  display: flex;
+  gap: 8px;
+
+  select {
+    flex: 1;
+  }
+}

@@ -17,3 +17,14 @@ type Check struct {
 func Provide(constructor any) fx.Option {
 	return fx.Provide(fx.Annotate(constructor, fx.ResultTags(`group:"health"`)))
 }
+
+// Version reports what a dependency runs (the admin panel's "versions" check); fx group "versions".
+type Version struct {
+	Name string
+	Get  func(ctx context.Context) (string, error)
+}
+
+// ProvideVersion registers a constructor returning a Version.
+func ProvideVersion(constructor any) fx.Option {
+	return fx.Provide(fx.Annotate(constructor, fx.ResultTags(`group:"versions"`)))
+}

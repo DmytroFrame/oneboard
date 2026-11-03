@@ -44,19 +44,13 @@ when someone signs up with that email.
 
 ## Features
 
-- **Organizations.** Anyone can create one; a person can belong to several. Roles:
-
-  | | owner | admin | member |
-  |---|---|---|---|
-  | invite people | ✓ (any role) | ✓ (admin/member) | |
-  | remove people | ✓ | members only | |
-  | change roles | ✓ | | |
-  | create and rename projects | ✓ | ✓ | |
-  | delete the organization | ✓ | | |
-
-  Invitations are by email: registered people join immediately, others when they sign up. The last owner
-  can't be demoted or removed. People who leave or are removed lose access to all of the organization's
-  projects; projects they owned pass to an owner.
+- **Organizations are isolated workspaces (tenants).** Anyone signed in can create one; a person can
+  belong to several and switches between them in the sidebar (each request sends `X-Organization`). In
+  each, they have a company role (`OWNER`, `ADMIN`, `MANAGER`, `RECRUITER`, `HR`, `SALES`, `EMPLOYEE`,
+  `CONTRACTOR`, `ACCOUNTANT`, `CANDIDATE`, plus `LEAD`) that decides what they see and do there; people,
+  projects, HR data, holidays, wiki and reports of one organization are invisible from another. Sign-up
+  is by invitation: invited emails join with the invited role (registered people join at once). The
+  last owner can't be demoted or removed; people who leave lose access to the organization's projects.
 - **Projects** belong to an organization and each has a board and a task key (`KAN-1`, `MOB-3`). The
   project owner adds members, but only from the organization. Only project members can be assignees.
 - **Boards:** custom columns (add, rename, reorder, delete moving cards elsewhere), drag and drop,
@@ -64,6 +58,32 @@ when someone signs up with that email.
   description, word prefixes) and assignee filters.
 - **Home `/home`:** stats (organizations, projects, assigned to me, urgent, created by me), "My tasks",
   organizations and projects. Signed-in users are redirected here from `/`, `/login` and `/register`.
+- **Company features** (from OmiTeam's ERP/HRM; decisions in
+  [docs/omiteam-integration.md](docs/omiteam-integration.md)). Every account has a company role
+  (`OWNER`…`CANDIDATE`, plus `LEAD`) that decides what it sees; the permission matrix is
+  `backend/internal/domain/company.go`.
+  - **Accounts:** password reset by email (SMTP; Mailpit locally), change password, admin reset,
+    deactivate and dismiss with a reason.
+  - **Team `/team` and profiles `/people/:id`:** filters, contacts, skills, finance (salary only for HR),
+    documents, comments and 360 feedback; reference lists (specializations, tech stacks, channels).
+  - **Projects:** client, dates, billable, budget, main project, sections, pinning, project admins;
+    tasks get tags, story points, budget, special types, checklists, comments, history, templates, bulk
+    moves and column statuses; backlog, milestones, sprints and versions; **statistics** (tasks created
+    and done per week/month/year, average time in chosen columns); **comments** by category and a
+    **project wiki**.
+  - **Time tracking `/time`:** weekly timesheet against the norm (holidays and absences count), logging
+    for others by managers, a "missing days" reminder.
+  - **Vacations `/vacations`** with reviewers, statistics and allowances; **public holidays**.
+  - **Home widgets:** headcount, birthdays, work anniversaries, probation, who is away, the week's
+    billable/other hours chart and the holidays list.
+  - **Reports `/reports`:** time report grouped by project, person, milestone, task or day (CSV export),
+    billability and bench by person or project (`Bench % = (norm − billable − absences) ÷ norm`).
+  - **Candidates `/candidates` and HR statistics `/statistics`:** the hiring funnel, labels,
+    expectations, recruiter, rejection reasons, hiring with a role; hires and dismissals by month.
+  - **Wiki `/wiki`:** an article tree with editors, readers, groups, "everyone in the company" or the
+    parent's access; search, archive, version history with a diff, groups.
+  - **Backwoods `/backwoods`** (owners and admins, linked from Settings): database backups to the private
+    bucket (on demand and every `BACKUP_EVERY`), the schema without values, runtime versions, data checks.
 - **Real-time collaboration** (see [Real time](#real-time)):
   - avatars of people currently on the board are highlighted, the rest dimmed;
   - Figma-style live cursors with names;
@@ -250,6 +270,7 @@ The backend reads `../.env` (or the file in `ENV_FILE`); environment variables t
 | `APP_ENV` | `development` | | `development` or `production` |
 | `ADDR`, `STATIC_DIR` | `:8080`, `../frontend/dist` | `:8080`, `/app/web` (image) | listen address, built SPA |
 | `SEED` | `1` | `0` | demo data for an empty database |
+| `PLATFORM_ADMINS` | `demo@example.com` | — | comma-separated emails of the installation's admins (backups, schema, versions) |
 | `SECURE_COOKIES` | `0` | `1` | `Secure` refresh cookie (HTTPS) |
 | `LOG_FORMAT` | `text` | `json` | |
 | `JWT_SECRET` | — (required, ≥ 32 chars) | | signs JWTs and file URLs; changing it ends all sessions |
@@ -271,6 +292,9 @@ The backend reads `../.env` (or the file in `ENV_FILE`); environment variables t
 | `S3_FORCE_PATH_STYLE`, `S3_CREATE_BUCKET` | `1`, `1` | `0`, `0` | |
 | `STUN_URLS`, `TURN_URLS` | from `.env` (local coturn) | — | comma-separated; without them only direct connections work |
 | `TURN_SECRET`, `TURN_CREDENTIAL_TTL` | from `.env`, `12h` | | coturn `static-auth-secret`; per-user credentials are derived from it |
+| `APP_URL` | `http://localhost:5173` | — | public address used in emailed links (password reset) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `MAIL_FROM` | from `.env` (Mailpit) | — | outgoing mail; no `SMTP_HOST` = emails are only logged |
+| `BACKUP_EVERY`, `BACKUP_MIN_GAP` | `24h`, `1h` | | scheduled database backup interval (`0` = only by hand); minimum gap between backups made by hand |
 
 Health endpoints: `GET /healthz` (liveness) and `GET /readyz` (readiness: Postgres and Redis).
 
@@ -320,20 +344,21 @@ Things to keep in mind:
 | POST | `/api/auth/login` | `{email, password}` |
 | POST | `/api/auth/refresh` | refresh cookie → new token pair (rotation) |
 | POST | `/api/auth/logout` | revokes the refresh token and, if sent, the access token |
-| GET | `/api/auth/me` | current user with `settings: {language, theme}` |
+| GET | `/api/auth/me` | current user with `settings`, the current `organization`, all `organizations` (for the switcher), `platformAdmin`, and in the current organization: `role`, `additionRoles`, granted `permissions`, `assignableRoles` |
 | GET | `/api/dashboard` | stats and the tasks assigned to me |
 | GET | `/api/voice/rooms` | `{rooms: {<projectId>: [{connId, userId, name, muted}]}}`, non-empty rooms of my projects |
 | GET | `/api/voice/ice` | `{iceServers}` for `RTCPeerConnection`, with TURN credentials valid for `TURN_CREDENTIAL_TTL` |
 | GET, POST | `/api/organizations` | my organizations; `{name}` creates one (the creator is owner) |
 | GET, PUT, DELETE | `/api/organizations/{id}` | rename: owner/admin; delete: owner |
 | GET | `/api/organizations/{id}/members` | members with roles |
-| PUT | `/api/organizations/{id}/members/{userId}` | `{role}` — owner only |
+| PUT | `/api/organizations/{id}/members/{userId}` | `{role, additionRoles?}` — company role in the organization (`domain.CheckRoleChange`; at least one owner stays) |
 | DELETE | `/api/organizations/{id}/members/{userId}` | remove a member, or leave (own id) |
 | GET, POST | `/api/organizations/{id}/invitations` | pending invitations; `{email, role}` → `{status: added\|invited}` |
 | DELETE | `/api/organizations/{id}/invitations/{invitationId}` | revoke an invitation |
 | PUT | `/api/users/me/avatar` | `multipart/form-data`, field `avatar` — PNG/JPEG/WebP/GIF up to 5 MB |
 | DELETE | `/api/users/me/avatar` | remove my avatar |
 | PUT | `/api/users/me/settings` | `{language: auto\|en\|uk\|de, theme: auto\|light\|dark}` |
+| PUT | `/api/users/:id/role` | `{role, additionRoles?}` — company role (rules: `domain.CheckRoleChange`); the user's tabs reload their account |
 | GET | `/api/users/{id}/avatar?v=&sig=` | avatar image; no token, authorised by the URL signature |
 | GET | `/api/projects` | the current user's projects |
 | POST | `/api/projects` | `{organizationId, name, key}` — org owner/admin; the creator becomes owner |
@@ -353,4 +378,19 @@ Things to keep in mind:
 | DELETE | `/api/attachments/{id}` | uploader or project owner |
 | GET | `/api/attachments/{id}/file\|thumb?exp=&sig=` | file or thumbnail via a signed URL (`&download=1` forces a download) |
 | GET (WebSocket) | `/api/ws` | real time, see above |
+
+Company features (all under `/api`, bearer token; permissions are checked by the use cases):
+
+| Area | Endpoints |
+|---|---|
+| Accounts | `POST /auth/password-reset`, `GET\|POST /auth/password-reset/:token`, `PUT /users/me/password`, `POST /users/:id/password-reset`, `POST /users/:id/dismiss\|activate\|deactivate` |
+| People | `GET\|POST /people`, `GET\|PUT /people/:id`, `GET\|POST /people/:id/comments\|feedback\|documents`, `DELETE /person-comments/:id`, `PUT\|DELETE /documents/:id`, `GET /documents/:id/file`, `GET\|POST /directories/:kind`, `PUT\|DELETE /directory-items/:id` |
+| Projects | `PUT /projects/:id/settings\|pin`, `PUT /projects/:id/members/:userId` (`{role}`), `GET /projects?all=1` |
+| Tasks | `PUT /cards/:id/details\|template`, `GET /cards/:id/history`, `GET /projects/:id/templates\|task-search`, `POST /templates/:id/use`, tags (`/projects/:id/tags`, `/tags/:id`), checklists (`/cards/:id/checklists`, `/checklists/:id`, `/checklists/:id/items`, `/checklist-items/:id`), comments (`/cards/:id/comments`, `/card-comments/:id`), `PUT /columns/:id/status`, `POST /columns/:id/bulk-move`, milestones / sprints / versions (`/projects/:id/<kind>`, `/<kind>/:itemId`) |
+| Time | `GET /timelogs/week?date=&user=`, `GET /timelogs/missing`, `POST /timelogs`, `PUT\|DELETE /timelogs/:id`, `GET /cards/:id/timelogs`, holidays (`/holidays`, `/holidays/:id`), vacations (`/vacations`, `/vacations/mine\|review\|week\|stats\|reviewers`, `/vacations/:id`, `/vacations/:id/reviewers\|status`) |
+| Dashboard | `GET /dashboard/company`, `GET /dashboard/worktime?date=&team=1` |
+| Reports | `GET /reports/time?from=&to=&projects=&users=&milestone=&billable=&group=`, `GET /reports/time/export` (CSV), `GET /reports/people?from=&to=&roles=`, `GET /projects/:id/statistics?period=week\|month\|year&columns=` |
+| HR | `GET /candidates`, `GET\|PUT /candidates/:id`, `PUT /candidates/:id/status\|rejection`, `POST /candidates/:id/hire`, `GET /hr/statistics?year=&from=&to=`, `DELETE /hr/events/:id` |
+| Wiki | `GET\|POST /wiki/articles`, `GET /wiki/home`, `GET /wiki/search?q=`, `GET\|PUT /wiki/articles/:id`, `PUT /wiki/articles/:id/archived`, `GET\|PUT /wiki/articles/:id/access`, `GET /wiki/articles/:id/versions`, `GET /wiki/versions/:id`, `GET /projects/:id/wiki`, groups (`/wiki/groups`, `/wiki/groups/:id`, `/wiki/groups/:id/usage`), project comments (`/projects/:id/comments`, `/project-comments/:id`) |
+| Backwoods | `GET\|POST /backwoods/backups`, `GET /backwoods/backups/:id/download`, `GET /backwoods/schema\|versions\|special-tasks\|project-comments` |
 | GET | `/healthz`, `/readyz` | liveness / readiness |

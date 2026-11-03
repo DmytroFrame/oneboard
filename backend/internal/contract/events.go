@@ -53,6 +53,27 @@ type Card struct {
 	UpdatedAt       time.Time  `json:"updatedAt"`
 	AttachmentCount int        `json:"attachmentCount"`
 	Cover           *CardCover `json:"cover"`
+
+	// Task fields (added with OmiTeam's task management; absent from older publishers).
+	StoryPoints    *int     `json:"storyPoints,omitempty"`
+	BudgetHours    *float64 `json:"budgetHours,omitempty"`
+	Billable       bool     `json:"billable"`
+	SpecialType    string   `json:"specialType,omitempty"`
+	MilestoneID    *int64   `json:"milestoneId,omitempty"`
+	SprintID       *int64   `json:"sprintId,omitempty"`
+	VersionID      *int64   `json:"versionId,omitempty"`
+	IsTemplate     bool     `json:"isTemplate,omitempty"`
+	Tags           []Tag    `json:"tags,omitempty"`
+	ChecklistDone  int      `json:"checklistDone,omitempty"`
+	ChecklistTotal int      `json:"checklistTotal,omitempty"`
+	CommentCount   int      `json:"commentCount,omitempty"`
+	TrackedMinutes int      `json:"trackedMinutes,omitempty"`
+}
+
+type Tag struct {
+	ID    int64  `json:"id"`
+	Name  string `json:"name"`
+	Color string `json:"color"`
 }
 
 type CardCover struct {
@@ -94,6 +115,12 @@ func NewBoardEvent(e domain.BoardEvent) BoardEvent {
 			Description: c.Description, Priority: string(c.Priority), Position: c.Position,
 			AuthorID: c.AuthorID, AssigneeID: c.AssigneeID, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
 			AttachmentCount: c.AttachmentCount,
+			StoryPoints:     c.StoryPoints, BudgetHours: c.BudgetHours, Billable: c.Billable, SpecialType: string(c.SpecialType),
+			MilestoneID: c.MilestoneID, SprintID: c.SprintID, VersionID: c.VersionID, IsTemplate: c.IsTemplate,
+			ChecklistDone: c.ChecklistDone, ChecklistTotal: c.ChecklistTotal, CommentCount: c.CommentCount, TrackedMinutes: c.TrackedMinutes,
+		}
+		for _, t := range c.Tags {
+			card.Tags = append(card.Tags, Tag{t.ID, t.Name, t.Color})
 		}
 		if cv := c.Cover; cv != nil {
 			card.Cover = &CardCover{AttachmentID: cv.AttachmentID, Kind: string(cv.Kind), HasThumb: cv.HasThumb}
@@ -115,6 +142,14 @@ func (e BoardEvent) Domain() domain.BoardEvent {
 			Description: c.Description, Priority: domain.Priority(c.Priority), Position: c.Position,
 			AuthorID: c.AuthorID, AssigneeID: c.AssigneeID, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
 			AttachmentCount: c.AttachmentCount,
+			TaskDetails: domain.TaskDetails{StoryPoints: c.StoryPoints, BudgetHours: c.BudgetHours, Billable: c.Billable,
+				SpecialType: domain.SpecialType(c.SpecialType), MilestoneID: c.MilestoneID, SprintID: c.SprintID, VersionID: c.VersionID},
+			IsTemplate: c.IsTemplate, ChecklistDone: c.ChecklistDone, ChecklistTotal: c.ChecklistTotal,
+			CommentCount: c.CommentCount, TrackedMinutes: c.TrackedMinutes,
+		}
+		for _, t := range c.Tags {
+			card.Tags = append(card.Tags, domain.Tag{ID: t.ID, ProjectID: c.ProjectID, Name: t.Name, Color: t.Color})
+			card.TagIDs = append(card.TagIDs, t.ID)
 		}
 		if cv := c.Cover; cv != nil {
 			card.Cover = &domain.CardCover{AttachmentID: cv.AttachmentID, Kind: domain.AttachmentKind(cv.Kind), HasThumb: cv.HasThumb}

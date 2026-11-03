@@ -1,0 +1,104 @@
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.title {
+  font-size: 28px;
+  margin: 4px 0 0;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+
+  label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-subtle);
+  }
+
+  select {
+    width: auto;
+  }
+}
+
+.closed {
+  display: flex;
+  gap: 24px;
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--text-subtle);
+
+  strong {
+    color: var(--text);
+    font-size: 18px;
+  }
+}
+
+.lists {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+
+  @include mobile {
+    grid-template-columns: 1fr;
+  }
+}
+
+.count {
+  font-size: 13px;
+  color: var(--text-subtle);
+  font-weight: 600;
+}
+
+.flush {
+  margin: 0;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--r-md);
+
+  &:hover {
+    background: var(--hover);
+  }
+}
+
+.person {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+
+  small {
+    @include ellipsis;
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+}

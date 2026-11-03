@@ -8,6 +8,11 @@
   overflow-y: auto;
   height: 100%;
 
+  /* The page scrolls as a whole; sections never shrink (a scroll container would collapse to 0). */
+  > * {
+    flex-shrink: 0;
+  }
+
   @include mobile {
     padding: 4px 2px calc(24px + env(safe-area-inset-bottom));
     gap: 14px;

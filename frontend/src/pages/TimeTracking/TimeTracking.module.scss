@@ -1,0 +1,120 @@
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  h1 {
+    font-size: 28px;
+    margin: 4px 0 0;
+  }
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  select {
+    width: auto;
+  }
+}
+
+.rules {
+  margin: 0;
+}
+
+.dayHead {
+  text-align: center !important;
+}
+
+.off {
+  color: var(--text-faint) !important;
+}
+
+.dayNote {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-subtle);
+}
+
+.task {
+  min-width: 220px;
+  white-space: normal !important;
+
+  a {
+    color: var(--text);
+    text-decoration: none;
+    display: block;
+  }
+
+  small {
+    color: var(--text-subtle);
+    font-size: 12px;
+  }
+}
+
+.cell {
+  text-align: center !important;
+}
+
+.cellBtn {
+  @include bare-button;
+  padding: 2px 6px;
+  border-radius: 6px;
+
+  &:hover {
+    background: var(--hover);
+  }
+}
+
+.short {
+  color: var(--danger);
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.entries {
+  @include glass-panel;
+  border-radius: var(--r-lg);
+  padding: 6px 12px;
+}
+
+.entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  font-size: 14px;
+
+  & + & {
+    border-top: 1px solid var(--separator);
+  }
+}
+
+.entryDay {
+  width: 90px;
+  color: var(--text-subtle);
+  font-size: 13px;
+}
+
+.entryTask {
+  flex: 1;
+  min-width: 0;
+
+  small {
+    color: var(--text-subtle);
+  }
+}
+
+.entryTime {
+  font-weight: 650;
+}

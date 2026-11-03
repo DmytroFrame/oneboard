@@ -40,7 +40,7 @@ export default function Register() {
         <Field label={t("common.name")}>
           <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus maxLength={100} />
         </Field>
-        <Field label={t("common.email")}>
+        <Field label={t("common.email")} hint={t("auth.inviteOnly")}>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </Field>
         <Field label={t("common.password")} hint={t("auth.passwordHint")}>

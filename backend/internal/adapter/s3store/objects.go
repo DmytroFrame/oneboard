@@ -20,8 +20,10 @@ import (
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
 	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/attachment"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/backwoods"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/board"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/organization"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/people"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/project"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/user"
 )
@@ -30,10 +32,12 @@ var Module = modules.Register(modules.Adapters, fx.Module("s3",
 	fx.Provide(
 		NewObjectStore,
 		func(s *ObjectStore) user.AvatarStorage { return s },
+		func(s *ObjectStore) backwoods.Storage { return s },
 		func(s *ObjectStore) attachment.Storage { return s },
 		func(s *ObjectStore) board.FileStorage { return s },
 		func(s *ObjectStore) project.FileStorage { return s },
 		func(s *ObjectStore) organization.FileStorage { return s },
+		func(s *ObjectStore) people.FileStorage { return s },
 	),
 ))
 
@@ -174,4 +178,10 @@ func (s *ObjectStore) Get(ctx context.Context, key string) (io.ReadCloser, user.
 func (s *ObjectStore) Delete(ctx context.Context, key string) error {
 	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &s.bucket, Key: &key})
 	return err
+}
+
+// Read opens an object for streaming; domain.ErrNoRows if it is missing.
+func (s *ObjectStore) Read(ctx context.Context, key string) (io.ReadCloser, error) {
+	body, _, err := s.Get(ctx, key)
+	return body, err
 }

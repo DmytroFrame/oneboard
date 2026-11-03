@@ -19,6 +19,7 @@ import (
 
 	"github.com/DmytroFrame/oneboard/backend/internal/config"
 	"github.com/DmytroFrame/oneboard/backend/internal/domain"
+	"github.com/DmytroFrame/oneboard/backend/internal/health"
 	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/board"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/organization"
@@ -26,6 +27,15 @@ import (
 )
 
 var Module = modules.Register(modules.Adapters, fx.Module("opensearch",
+	health.ProvideVersion(func(i *CardIndex) health.Version {
+		return health.Version{Name: "OpenSearch", Get: func(ctx context.Context) (string, error) {
+			resp, err := i.client.Info(ctx, nil)
+			if err != nil {
+				return "", err
+			}
+			return resp.Version.Number, nil
+		}}
+	}),
 	fx.Provide(
 		NewCardIndex,
 		func(i *CardIndex) board.SearchIndex { return i },

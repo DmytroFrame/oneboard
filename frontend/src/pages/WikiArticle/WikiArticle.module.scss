@@ -1,0 +1,45 @@
+.path {
+  font-size: 13px;
+  color: var(--text-subtle);
+
+  a {
+    color: var(--text-subtle);
+    text-decoration: none;
+
+    &:hover {
+      color: var(--text);
+    }
+  }
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  h1 {
+    font-size: 28px;
+    margin: 0;
+  }
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--text-subtle);
+}
+
+.content {
+  min-height: 200px;
+}

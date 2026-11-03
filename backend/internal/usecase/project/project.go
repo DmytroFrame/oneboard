@@ -27,6 +27,12 @@ type Projects interface {
 	Create(ctx context.Context, orgID int64, name, key string, ownerID int64) (int64, error) // domain.ErrDuplicate on a taken key
 	Rename(ctx context.Context, projectID int64, name string) error
 	Delete(ctx context.Context, projectID int64) error
+	// ListInOrg: the user's projects in one organization; ListAll: every project there (viewAllProjects).
+	ListInOrg(ctx context.Context, orgID, userID int64) ([]domain.Project, error)
+	ListAll(ctx context.Context, orgID, userID int64) ([]domain.Project, error)
+	GetAny(ctx context.Context, projectID, userID int64) (domain.Project, error)
+	UpdateSettings(ctx context.Context, projectID int64, s domain.ProjectSettings) error
+	SetPinned(ctx context.Context, userID, projectID int64, pinned bool) error
 }
 
 type Members interface {
@@ -34,6 +40,7 @@ type Members interface {
 	List(ctx context.Context, projectID int64) ([]domain.Member, error)
 	Add(ctx context.Context, projectID, userID int64, role domain.Role) error // domain.ErrDuplicate if already a member
 	Remove(ctx context.Context, projectID, userID int64) error
+	SetRole(ctx context.Context, projectID, userID int64, role domain.Role) error // domain.ErrNoRows for non-members and the owner
 }
 
 type Columns interface {
@@ -44,9 +51,9 @@ type Cards interface {
 	UnassignUser(ctx context.Context, projectID, userID int64) error
 }
 
-// OrgRoles answers "what is this user's role in this organization".
+// OrgRoles answers "what is this user's place in this organization" (domain.ErrNoRows for outsiders).
 type OrgRoles interface {
-	Role(ctx context.Context, orgID, userID int64) (domain.OrgRole, error)
+	Membership(ctx context.Context, orgID, userID int64) (domain.Membership, error)
 }
 
 type AttachmentFiles interface {
@@ -109,8 +116,9 @@ func (s *Service) tellMembers(ctx context.Context, members []domain.Member, acto
 	}
 }
 
-func (s *Service) List(ctx context.Context, userID int64) ([]domain.Project, error) {
-	return s.projects.ListForUser(ctx, userID)
+// List: the user's projects in the organization they work in.
+func (s *Service) List(ctx context.Context, actor domain.User) ([]domain.Project, error) {
+	return s.projects.ListInOrg(ctx, actor.OrgID, actor.ID)
 }
 
 func validName(name string) (string, error) {
@@ -122,16 +130,13 @@ func validName(name string) (string, error) {
 }
 
 // Create makes a project in an organization, with the default columns, owned by userID.
-// Organization owners and admins can create projects.
+// Members of the organization with addProject (owners, admins, managers, leads) can create projects.
 func (s *Service) Create(ctx context.Context, userID, orgID int64, name, key string) (domain.Project, error) {
-	orgRole, err := s.orgs.Role(ctx, orgID, userID)
-	if err != nil {
-		return domain.Project{}, err
+	m, err := s.orgs.Membership(ctx, orgID, userID)
+	if err != nil || !m.Active {
+		return domain.Project{}, usecase.NotFoundAs(err, domain.ErrOrgNotFound)
 	}
-	if orgRole == domain.OrgRoleNone {
-		return domain.Project{}, domain.ErrOrgNotFound
-	}
-	if !orgRole.CanCreateProjects() {
+	if !(domain.User{ID: userID}.In(m)).Can(domain.PermAddProject) {
 		return domain.Project{}, domain.ErrOrgAdminOnly
 	}
 	name, err = validName(name)
@@ -228,11 +233,10 @@ func (s *Service) AddMember(ctx context.Context, userID, projectID, targetID int
 		return nil, err
 	}
 	// Only people from the project's organization can join it.
-	orgRole, err := s.orgs.Role(ctx, p.OrgID, targetID)
-	if err != nil {
-		return nil, err
-	}
-	if orgRole == domain.OrgRoleNone {
+	if m, err := s.orgs.Membership(ctx, p.OrgID, targetID); err != nil || !m.Active {
+		if err != nil && !errors.Is(err, domain.ErrNoRows) {
+			return nil, err
+		}
 		return nil, domain.ErrNotInOrg
 	}
 	if err := s.members.Add(ctx, projectID, targetID, domain.RoleMember); err != nil {

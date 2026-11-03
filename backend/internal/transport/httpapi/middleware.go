@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,6 +42,15 @@ func currentUser(c *echo.Context) domain.User {
 	return u
 }
 
+// orgHeader is the organization the client works in (0 = not chosen yet).
+func orgHeader(r *http.Request) int64 {
+	id, err := strconv.ParseInt(r.Header.Get("X-Organization"), 10, 64)
+	if err != nil || id < 0 {
+		return 0
+	}
+	return id
+}
+
 // bearerToken extracts the token from "Authorization: Bearer <token>".
 func bearerToken(r *http.Request) string {
 	scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
@@ -61,6 +71,11 @@ func (m *Middleware) RequireAuth(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 		u, err := m.auth.Authenticate(r.Context(), token)
 		if err != nil {
+			return err
+		}
+		// Every request works in one organization (X-Organization, else the user's first); the user
+		// carries their role there, so permission checks and queries stay inside it.
+		if u, err = m.auth.InOrg(r.Context(), u, orgHeader(r)); err != nil {
 			return err
 		}
 		ctx := context.WithValue(r.Context(), ctxKey{}, u)

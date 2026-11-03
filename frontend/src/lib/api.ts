@@ -1,5 +1,6 @@
 import { i18n, translateError } from "@/i18n";
 import type {
+  CompanyRole,
   Attachment,
   Card,
   CardFilters,
@@ -7,13 +8,15 @@ import type {
   CardPage,
   Column,
   CurrentUser,
+  CompanyWidgets,
   Dashboard,
+  DayWork,
   Invitation,
   Member,
-  Organization,
   OrgMember,
-  OrgRole,
+  Organization,
   Project,
+  ProjectSettings,
   Settings,
 } from "@/types";
 import type { VoiceParticipant } from "@/lib/voice";
@@ -57,7 +60,7 @@ function setSession(s: SessionResponse | null) {
 function refreshSession(): Promise<CurrentUser | null> {
   refreshing ??= (async () => {
     try {
-      const res = await fetch("/api/auth/refresh", { method: "POST", credentials: "same-origin" });
+      const res = await fetch("/api/auth/refresh", { method: "POST", credentials: "same-origin", headers: authHeaders(null) });
       if (!res.ok) {
         setSession(null);
         return null;
@@ -94,13 +97,50 @@ export function getRealtimeConnId() {
 
 const isAuthPath = (path: string) => path.startsWith("/auth/");
 
-async function request<T>(method: string, path: string, body?: unknown, retry = true): Promise<T> {
+// ---------- organization ----------
+// Every request works in one organization (an isolated workspace), sent as X-Organization. The choice
+// is per browser; the server falls back to the user's first organization when there is none.
+
+const ORG_KEY = "oneboard:organization";
+
+export function currentOrgId(): number | null {
+  try {
+    return Number(localStorage.getItem(ORG_KEY)) || null;
+  } catch {
+    return null;
+  }
+}
+
+export function setCurrentOrgId(id: number | null) {
+  try {
+    if (id) localStorage.setItem(ORG_KEY, String(id));
+    else localStorage.removeItem(ORG_KEY);
+  } catch {
+    // storage blocked: the server's default organization is used
+  }
+}
+
+/** Switches to another organization: everything on screen belongs to the old one, so start over. */
+export function switchOrganization(id: number) {
+  setCurrentOrgId(id);
+  window.location.assign("/home");
+}
+
+/** Headers for requests made outside request() (downloads): the token and the organization. */
+export function authHeaders(token: string | null): Record<string, string> {
+  const h: Record<string, string> = {};
+  if (token) h.Authorization = `Bearer ${token}`;
+  const org = currentOrgId();
+  if (org) h["X-Organization"] = String(org);
+  return h;
+}
+
+export async function request<T>(method: string, path: string, body?: unknown, retry = true): Promise<T> {
   // Renew a token that is about to expire instead of sending it and waiting for a 401.
   if (accessToken && !isAuthPath(path) && Date.now() > accessExpiresAt - 30_000) await refreshSession();
 
-  const headers: Record<string, string> = {};
+  const headers = authHeaders(accessToken);
   if (body !== undefined && !(body instanceof FormData)) headers["Content-Type"] = "application/json";
-  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
   if (realtimeConnId) headers["X-Realtime-Conn"] = realtimeConnId;
 
   let res: Response;
@@ -129,6 +169,11 @@ async function request<T>(method: string, path: string, body?: unknown, retry = 
     } catch {
       // response has no JSON body
     }
+    // The chosen organization is gone (removed, deactivated): forget it and start over in another one.
+    if (code === "org_unavailable" && currentOrgId()) {
+      setCurrentOrgId(null);
+      window.location.assign("/home");
+    }
     throw new ApiError(res.status, message, code);
   }
   if (res.status === 204) return undefined as T;
@@ -143,7 +188,7 @@ export const api = {
   restoreSession: async (): Promise<CurrentUser | null> => {
     let res: Response;
     try {
-      res = await fetch("/api/auth/refresh", { method: "POST", credentials: "same-origin" });
+      res = await fetch("/api/auth/refresh", { method: "POST", credentials: "same-origin", headers: authHeaders(null) });
     } catch {
       throw new ApiError(0, i18n.t("errors.network"), "network");
     }
@@ -173,6 +218,12 @@ export const api = {
     }
   },
   me: () => request<CurrentUser>("GET", "/auth/me"),
+  requestPasswordReset: (email: string) => request<void>("POST", "/auth/password-reset", { email }),
+  checkResetToken: (token: string) => request<void>("GET", `/auth/password-reset/${encodeURIComponent(token)}`),
+  resetPassword: (token: string, password: string) =>
+    request<void>("POST", `/auth/password-reset/${encodeURIComponent(token)}`, { password }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<void>("PUT", "/users/me/password", { currentPassword, newPassword }),
 
   uploadAvatar: (image: Blob) => {
     const form = new FormData();
@@ -183,6 +234,8 @@ export const api = {
   updateSettings: (settings: Settings) => request<CurrentUser>("PUT", "/users/me/settings", settings),
 
   dashboard: () => request<Dashboard>("GET", "/dashboard"),
+  company: () => request<CompanyWidgets>("GET", "/dashboard/company"),
+  workTime: (date: string, team: boolean) => request<DayWork[]>("GET", `/dashboard/worktime?date=${date}${team ? "&team=1" : ""}`),
 
   /** Who is in the voice rooms of the user's projects (non-empty rooms only, keyed by project id). */
   voiceRooms: () => request<{ rooms: Record<string, VoiceParticipant[]> }>("GET", "/voice/rooms"),
@@ -195,16 +248,22 @@ export const api = {
   renameOrganization: (id: number, name: string) => request<Organization>("PUT", `/organizations/${id}`, { name }),
   deleteOrganization: (id: number) => request<void>("DELETE", `/organizations/${id}`),
   orgMembers: (id: number) => request<OrgMember[]>("GET", `/organizations/${id}/members`),
-  changeOrgRole: (id: number, userId: number, role: OrgRole) =>
+  changeOrgRole: (id: number, userId: number, role: CompanyRole) =>
     request<OrgMember[]>("PUT", `/organizations/${id}/members/${userId}`, { role }),
   removeOrgMember: (id: number, userId: number) => request<void>("DELETE", `/organizations/${id}/members/${userId}`),
   invitations: (id: number) => request<Invitation[]>("GET", `/organizations/${id}/invitations`),
-  invite: (id: number, email: string, role: OrgRole) =>
+  invite: (id: number, email: string, role: CompanyRole) =>
     request<{ status: "added" | "invited" }>("POST", `/organizations/${id}/invitations`, { email, role }),
   revokeInvitation: (id: number, invitationId: number) =>
     request<void>("DELETE", `/organizations/${id}/invitations/${invitationId}`),
 
   projects: () => request<Project[]>("GET", "/projects"),
+  /** Every project in the company for those with viewAllProjects; the user's own for others. */
+  allProjects: () => request<Project[]>("GET", "/projects?all=1"),
+  updateProjectSettings: (id: number, settings: ProjectSettings) => request<Project>("PUT", `/projects/${id}/settings`, settings),
+  pinProject: (id: number, pinned: boolean) => request<void>("PUT", `/projects/${id}/pin`, { pinned }),
+  setMemberRole: (projectId: number, userId: number, role: "admin" | "member") =>
+    request<Member[]>("PUT", `/projects/${projectId}/members/${userId}`, { role }),
   createProject: (organizationId: number, name: string, key: string) =>
     request<Project>("POST", "/projects", { organizationId, name, key }),
   renameProject: (id: number, name: string) => request<Project>("PUT", `/projects/${id}`, { name }),
@@ -228,9 +287,14 @@ export const api = {
     if (filters.q.trim()) params.set("q", filters.q.trim());
     if (filters.assignees.length) params.set("assignees", filters.assignees.join(","));
     if (filters.unassigned) params.set("unassigned", "1");
+    if (filters.milestone) params.set("milestone", String(filters.milestone));
+    if (filters.sprint) params.set("sprint", String(filters.sprint));
+    if (filters.version) params.set("version", String(filters.version));
+    if (filters.tags?.length) params.set("tags", filters.tags.join(","));
     return request<CardPage>("GET", `/projects/${projectId}/cards?${params}`);
   },
   createCard: (projectId: number, input: CardInput) => request<Card>("POST", `/projects/${projectId}/cards`, input),
+  card: (id: number) => request<Card>("GET", `/cards/${id}`),
   updateCard: (id: number, input: CardInput) => request<Card>("PUT", `/cards/${id}`, input),
   moveCard: (id: number, columnId: number, place: { beforeId?: number; afterId?: number } = {}) =>
     request<Card>("POST", `/cards/${id}/move`, { columnId, ...place }),

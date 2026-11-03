@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"go.uber.org/fx"
@@ -37,6 +38,15 @@ type Users interface {
 	// SetAvatar stores the new key (or "" to clear) and returns the previous one.
 	SetAvatar(ctx context.Context, userID int64, key string, at time.Time) (oldKey string, err error)
 	SetSettings(ctx context.Context, userID int64, s domain.Settings) error
+	// InOrg loads a person with their membership in an organization; domain.ErrNoRows for outsiders.
+	InOrg(ctx context.Context, orgID, userID int64) (domain.User, error)
+	SetActive(ctx context.Context, orgID, userID int64, active bool) error
+	Dismiss(ctx context.Context, orgID, userID int64, reason string, at time.Time) error
+}
+
+// HRLog records hires and dismissals for the HR statistics.
+type HRLog interface {
+	Record(ctx context.Context, e domain.HREvent) error
 }
 
 type ObjectInfo struct {
@@ -53,11 +63,13 @@ type AvatarStorage interface {
 type Service struct {
 	users   Users
 	storage AvatarStorage
+	events  usecase.UserEvents
+	hr      HRLog
 	log     *slog.Logger
 }
 
-func NewService(users Users, storage AvatarStorage, log *slog.Logger) *Service {
-	return &Service{users: users, storage: storage, log: log}
+func NewService(users Users, storage AvatarStorage, events usecase.UserEvents, hr HRLog, log *slog.Logger) *Service {
+	return &Service{users: users, storage: storage, events: events, hr: hr, log: log}
 }
 
 // UploadAvatar validates the image, stores it under a fresh key and replaces the user's previous avatar.
@@ -140,4 +152,64 @@ func (s *Service) UpdateSettings(ctx context.Context, userID int64, settings dom
 		return domain.User{}, err
 	}
 	return s.users.ByID(ctx, userID)
+}
+
+// target loads the person an admin action is about, in the actor's organization; its owners are out
+// of reach of all of them.
+func (s *Service) target(ctx context.Context, actor domain.User, id int64) (domain.User, error) {
+	u, err := s.users.InOrg(ctx, actor.OrgID, id)
+	if err != nil {
+		return domain.User{}, usecase.NotFoundAs(err, domain.ErrUserNotFound)
+	}
+	if u.Role == domain.CompanyOwner {
+		return domain.User{}, domain.ErrPermissionDenied
+	}
+	return u, nil
+}
+
+// Dismiss deactivates an employee in the actor's organization and records why (it shows up in HR statistics). Dismissing yourself
+// takes an extra permission.
+func (s *Service) Dismiss(ctx context.Context, actor domain.User, targetID int64, reason string) (domain.User, error) {
+	if !actor.Can(domain.PermFireUser) || (actor.ID == targetID && !actor.Can(domain.PermFireYourself)) {
+		return domain.User{}, domain.ErrPermissionDenied
+	}
+	u, err := s.target(ctx, actor, targetID)
+	if err != nil {
+		return domain.User{}, err
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" || len(reason) > 2000 {
+		return domain.User{}, domain.ErrDismissalReason
+	}
+	now := time.Now()
+	if err := s.users.Dismiss(ctx, actor.OrgID, u.ID, reason, now); err != nil {
+		return domain.User{}, err
+	}
+	if err := s.hr.Record(ctx, domain.HREvent{OrgID: actor.OrgID, User: u, Kind: domain.HRDismissed, Day: domain.DateOf(now), Reason: reason, ActorID: &actor.ID}); err != nil {
+		s.log.Error("record dismissal", "user", u.ID, "err", err) // the dismissal itself stands
+	}
+	u.Active, u.DismissedAt, u.DismissalReason = false, &now, reason
+	return u, nil
+}
+
+// SetActive deactivates (locks them out of the organization at once) or reactivates a member.
+func (s *Service) SetActive(ctx context.Context, actor domain.User, targetID int64, active bool) (domain.User, error) {
+	if !actor.Can(domain.PermEditUser) {
+		return domain.User{}, domain.ErrPermissionDenied
+	}
+	if actor.ID == targetID {
+		return domain.User{}, domain.ErrCannotDeactivateSelf
+	}
+	u, err := s.target(ctx, actor, targetID)
+	if err != nil {
+		return domain.User{}, err
+	}
+	if err := s.users.SetActive(ctx, actor.OrgID, u.ID, active); err != nil {
+		return domain.User{}, err
+	}
+	u.Active = active
+	if active {
+		u.DismissedAt, u.DismissalReason = nil, ""
+	}
+	return u, nil
 }

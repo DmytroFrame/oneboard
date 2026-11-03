@@ -30,12 +30,25 @@ var Module = modules.Register(modules.Adapters, fx.Module("redis",
 	health.Provide(func(c *redis.Client) health.Check {
 		return health.Check{Name: "redis", Run: func(ctx context.Context) error { return c.Ping(ctx).Err() }}
 	}),
+	health.ProvideVersion(func(c *redis.Client) health.Version {
+		return health.Version{Name: "Redis", Get: func(ctx context.Context) (string, error) {
+			info, err := c.Info(ctx, "server").Result()
+			for _, line := range strings.Split(info, "\n") {
+				if v, ok := strings.CutPrefix(strings.TrimSpace(line), "redis_version:"); ok {
+					return v, nil
+				}
+			}
+			return "", err
+		}}
+	}),
 	fx.Provide(
 		NewClient,
 		NewRefreshStore,
 		NewDenylist,
 		func(s *RefreshStore) auth.RefreshTokens { return s },
 		func(d *Denylist) auth.Revocations { return d },
+		NewResetTokens,
+		func(r *ResetTokens) auth.ResetTokens { return r },
 
 		NewBus, NewPresence, NewDocLog,
 		func(b *Bus) usecase.BoardEvents { return b },

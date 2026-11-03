@@ -1,0 +1,33 @@
+.page {
+  @include glass;
+  margin: 80px auto;
+  max-width: 440px;
+  padding: 40px;
+  border-radius: var(--r-xl);
+  text-align: center;
+
+  h1 {
+    font-size: 24px;
+    margin: 8px 0;
+  }
+
+  p {
+    color: var(--text-subtle);
+    margin: 0 0 24px;
+  }
+
+  @include mobile {
+    margin: 40px 0;
+    padding: 28px 20px;
+  }
+}
+
+.code {
+  @include accent-gradient;
+  font-size: 56px;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}

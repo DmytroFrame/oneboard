@@ -159,6 +159,15 @@ services:
       - "127.0.0.1:3478:3478/tcp"
       - "127.0.0.1:49160-49200:49160-49200/udp"
 
+  # Catches outgoing email locally (password resets): set SMTP_HOST=localhost and SMTP_PORT=1025,
+  # then read the messages at http://localhost:8025.
+  mailpit:
+    image: axllent/mailpit:v1.27
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
 configs:
   redpanda-bootstrap:
     content: |

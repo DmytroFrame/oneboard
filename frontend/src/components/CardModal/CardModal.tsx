@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import { ModalBackdrop } from "@/components/ui/Modal/Modal";
 import type { BoardSocket } from "@/lib/realtime";
-import type { Attachment, Card, CardInput, Column, User } from "@/types";
+import type { Attachment, Card, CardInput, Column, Tag, User } from "@/types";
+import type { Planning } from "@/types/tasks";
 import { ExistingCard } from "./ExistingCard";
 import { NewCard } from "./NewCard";
 
@@ -21,6 +22,14 @@ export interface CardModalProps {
   onUpdate: (card: Card, input: CardInput) => Promise<void>;
   onMove: (card: Card, columnId: number) => Promise<void>;
   onDelete: (card: Card) => Promise<void>;
+  // OmiTeam task management
+  planning: Planning;
+  tags: Tag[];
+  /** A change made outside the shared text (details, checklists, comments): refresh the card face. */
+  onCardChanged: (card: Card) => void;
+  /** A card appeared (created from a template) or left the board (turned into a template). */
+  onCardAdded: (card: Card) => void;
+  onCardRemoved: (card: Card) => void;
 }
 
 /** The task editor: a form for a new card, a live shared editor for an existing one. Lazily loaded. */

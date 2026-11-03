@@ -23,29 +23,88 @@ import (
 	"github.com/DmytroFrame/oneboard/backend/internal/health"
 	"github.com/DmytroFrame/oneboard/backend/internal/modules"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/absence"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/attachment"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/auth"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/backwoods"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/board"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/collab"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/dashboard"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/hr"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/organization"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/people"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/project"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/reports"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/tasks"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/timetracking"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/user"
 	"github.com/DmytroFrame/oneboard/backend/internal/usecase/voice"
+	"github.com/DmytroFrame/oneboard/backend/internal/usecase/wiki"
 )
 
 // Module provides the pool, the transactor and every repository bound to the ports that use it.
 var Module = modules.Register(modules.Adapters, fx.Module("postgres",
 	health.Provide(func(db *DB) health.Check { return health.Check{Name: "postgres", Run: db.pool.Ping} }),
+	health.ProvideVersion(func(db *DB) health.Version {
+		return health.Version{Name: "PostgreSQL", Get: func(ctx context.Context) (string, error) {
+			var v string
+			return v, db.pool.QueryRow(ctx, `SHOW server_version`).Scan(&v)
+		}}
+	}),
 	fx.Provide(
 		NewDB,
 		NewUserRepo, NewProjectRepo, NewColumnRepo, NewCardRepo, NewSeeder,
 		NewOrgRepo, NewOrgMemberRepo, NewInvitationRepo, NewAttachmentRepo, NewDashboardRepo,
+		NewProfileRepo, NewDirectoryRepo, NewNoteRepo, NewDocumentRepo,
+		NewTagRepo, NewChecklistRepo, NewCardCommentRepo, NewHistoryRepo, NewPlanningRepo,
+		func(r *CardRepo) tasks.Cards { return r },
+		func(r *ColumnRepo) tasks.Columns { return r },
+		func(r *TagRepo) tasks.Tags { return r },
+		func(r *ChecklistRepo) tasks.Checklists { return r },
+		func(r *CardCommentRepo) tasks.Comments { return r },
+		func(r *HistoryRepo) tasks.History { return r },
+		func(r *HistoryRepo) board.History { return r },
+		func(r *PlanningRepo) tasks.Planning { return r },
+
+		NewTimelogRepo, NewHolidayRepo, NewVacationRepo, NewCompanyRepo,
+		func(r *CompanyRepo) dashboard.CompanyReader { return r },
+		NewReportRepo,
+		func(r *ReportRepo) reports.Reader { return r },
+		func(r calendar) reports.Calendar { return r },
+		func(r *ColumnRepo) reports.Columns { return r },
+		NewCandidateRepo, NewHREventRepo,
+		func(r *CandidateRepo) hr.Candidates { return r },
+		func(r *HREventRepo) hr.Log { return r },
+		func(r *HREventRepo) user.HRLog { return r },
+		func(r *HREventRepo) people.HRLog { return r },
+		func(r *UserRepo) hr.Accounts { return r },
+		NewWikiRepo, NewWikiGroupRepo, NewProjectCommentRepo,
+		func(r *WikiRepo) wiki.Articles { return r },
+		func(r *WikiGroupRepo) wiki.Groups { return r },
+		func(r *ProjectCommentRepo) wiki.ProjectComments { return r },
+		NewBackupRepo, NewInspectRepo,
+		func(r *BackupRepo) backwoods.Backups { return r },
+		func(r *InspectRepo) backwoods.Inspector { return r },
+		func(db *DB) backwoods.Dumper { return db },
+		func(r *TimelogRepo) timetracking.Logs { return r },
+		func(r *CardRepo) timetracking.Cards { return r },
+		func(r *ProjectRepo) timetracking.Projects { return r },
+		func(r *ProfileRepo) timetracking.Profiles { return r },
+		func(r calendar) timetracking.Calendar { return r },
+		func(h *HolidayRepo, v *VacationRepo) calendar { return calendar{h, v} },
+		func(r *HolidayRepo) absence.Holidays { return r },
+		func(r *VacationRepo) absence.Vacations { return r },
+		func(r *UserRepo) absence.Users { return r },
 		func(db *DB) usecase.Transactor { return db },
 
 		func(r *UserRepo) auth.Users { return r },
 		func(r *UserRepo) user.Users { return r },
 		func(r *UserRepo) organization.Users { return r },
+		func(r *UserRepo) people.Users { return r },
+		func(r *ProfileRepo) people.Profiles { return r },
+		func(r *DirectoryRepo) people.Directory { return r },
+		func(r *NoteRepo) people.Notes { return r },
+		func(r *DocumentRepo) people.Documents { return r },
 
 		func(r *ProjectRepo) project.Projects { return r },
 		func(r *ProjectRepo) project.Members { return r },
@@ -68,6 +127,7 @@ var Module = modules.Register(modules.Adapters, fx.Module("postgres",
 		func(r *OrgMemberRepo) project.OrgRoles { return r },
 		func(r *InvitationRepo) organization.Invitations { return r },
 		func(r *InvitationRepo) auth.Invitations { return r },
+		func(r *OrgRepo) auth.Founder { return r },
 
 		func(r *AttachmentRepo) attachment.Attachments { return r },
 		func(r *AttachmentRepo) board.AttachmentFiles { return r },
@@ -181,4 +241,10 @@ func mapErr(err error) error {
 func exec(ctx context.Context, db *DB, sql string, args ...any) error {
 	_, err := db.q(ctx).Exec(ctx, sql, args...)
 	return mapErr(err)
+}
+
+// calendar combines holidays and absences for time tracking and reports.
+type calendar struct {
+	*HolidayRepo
+	*VacationRepo
 }

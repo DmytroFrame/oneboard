@@ -1,6 +1,9 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"go.uber.org/fx"
@@ -22,7 +25,17 @@ func TestEveryNamespaceHasModules(t *testing.T) {
 			t.Errorf("nothing registered in %q (is the package imported in link.go?)", ns)
 		}
 	}
-	if n := len(modules.Of(modules.Routes)); n != 10 {
-		t.Errorf("%d route handlers registered, want 10", n)
+	// Every handler file registers itself with registerRoutes; all of them must have run.
+	files, _ := filepath.Glob("../transport/httpapi/*.go")
+	want := 0
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		src, _ := os.ReadFile(f)
+		want += strings.Count(string(src), "registerRoutes(New")
+	}
+	if n := len(modules.Of(modules.Routes)); n != want || want == 0 {
+		t.Errorf("%d route handlers registered, want %d", n, want)
 	}
 }

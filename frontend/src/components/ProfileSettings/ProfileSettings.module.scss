@@ -38,6 +38,17 @@
   font-size: 14px;
 }
 
+.role {
+  margin-top: 4px;
+  color: var(--text-subtle);
+  font-size: 13px;
+
+  strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+}
+
 .actions {
   display: flex;
   gap: 8px;

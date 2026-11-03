@@ -1,0 +1,53 @@
+.tree {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 14px;
+
+  &:first-child {
+    padding-left: 0;
+  }
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.toggle {
+  @include bare-button;
+  width: 18px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--text-subtle);
+}
+
+.link {
+  @include ellipsis;
+  flex: 1;
+  padding: 5px 8px;
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  color: var(--text);
+  text-decoration: none;
+
+  &:hover {
+    background: var(--hover);
+  }
+}
+
+.active {
+  @include glass-selected;
+  font-weight: 600;
+}
+
+.lock {
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.empty {
+  margin: 4px 0;
+  font-size: 13px;
+  color: var(--text-subtle);
+}
